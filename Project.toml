@@ -1,0 +1,8 @@
+name = "AlignedGP"
+uuid = "10690d73-1248-4c18-b36b-e20f1c4740bb"
+authors = ["Maarten Keijzer <maarten.keijzer@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Intervals = "d8418881-c3e1-53bb-8760-2df7ec849ed5"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
