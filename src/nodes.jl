@@ -3,16 +3,18 @@
 using Random
 
 struct AddedValue
-    allowed_intervals::IntervalSet
+    allowed_intervals::CIntervals
     value::Real
+    hits::Int
 
-    function AddedValue(v::Real) 
+    function AddedValue(v::Real)
         @assert isfinite(v)
-        new(IntervalSet(Interval(v, v)), v)
+        new(CIntervals(CInterval(v, v)), v, -1)
     end
-    AddedValue(allowed_intervals::IntervalSet{Interval{Float64,Closed,Closed}}, value::Real) = new(allowed_intervals, value)
+    AddedValue(allowed_intervals::CIntervals, value::Real) = new(allowed_intervals, value, -1)
+    AddedValue(allowed_intervals::CIntervals, value::Real, hits::Int) = new(allowed_intervals, value, hits)
 end
-zeroval = AddedValue(IntervalSet(Interval(0.0, 0.0)), 0.0)
+zeroval = AddedValue(CIntervals(CInterval(0.0, 0.0)), 0.0, -1)
 
 complexity(c::AddedValue) = c.value == 0 ? 0 : 1
 
@@ -41,6 +43,7 @@ struct Var <: Node
     index::Int
     addition::AddedValue
     Var(index::Int, addition::AddedValue) = new(index, addition)
+    Var(index::Int, c::Float64) = new(index, AddedValue(c))
     Var(index::Int) = new(index, zeroval)
 end
 
@@ -65,50 +68,29 @@ struct UnaryNode <: Node
     end
 end
 
-struct Tree
-    root::Node
-    hits::BitVector
-    complexity::Int
-    pathlen_complexity::Int
-    slope::Float64
-    intercept::Float64
-    mse::Float64
-    scaled_hitcount::Int
-    Tree(root::Node, hits::BitVector) = new(root, hits, complexity(root), pathlen_complexity(root), 1.0, 0.0, Inf, 0)
-    Tree(root::Node, hits::BitVector, slope::Float64, intercept::Float64, mse::Float64, scaled_hitcount::Int) =
-        new(root, hits, complexity(root), pathlen_complexity(root), slope, intercept, mse, scaled_hitcount)
-end
-
 Base.length(b::BinaryNode) = b.size
 Base.length(u::UnaryNode) = u.size
 Base.length(v::Var) = 1
 Base.length(z::Constant) = 1
-Base.length(t::Tree) = length(t.root)
 
 complexity(b::BinaryNode) = b.complexity
 complexity(u::UnaryNode) = u.complexity
 complexity(v::Var) = 1 + complexity(v.addition)
 complexity(::Constant) = 1
-complexity(t::Tree) = t.complexity
 
 pathlen_complexity(b::BinaryNode) = complexity(b) + pathlen_complexity(b.left) + pathlen_complexity(b.right)
 pathlen_complexity(u::UnaryNode) = complexity(u) + pathlen_complexity(u.child)
 pathlen_complexity(v::Var) = complexity(v)
 pathlen_complexity(::Constant) = 1
-pathlen_complexity(t::Tree) = t.pathlen_complexity
 
 evaluate(node::BinaryNode, x) = evaluate(node.fun, evaluate(node.left, x), evaluate(node.right, x)) .+ node.addition.value
 evaluate(node::UnaryNode, x) = evaluate(node.fun, evaluate(node.child, x)) .+ node.addition.value
 evaluate(node::Var, x) = x[node.index] .+ node.addition.value
 evaluate(node::Constant, x) = zero(first(x)) .+ node.addition.value
 
-evaluate(tree::Tree, x) = evaluate(tree.root, x)
-scaled_evaluate(tree::Tree, x) = tree.slope .* evaluate(tree.root, x) .+ tree.intercept
-
 """
 getindex
 """
-Base.getindex(tree::Tree, i::Int) = getindex(tree.root, i)
 
 function Base.getindex(node::Var, i::Int)
     @assert i == 1
@@ -137,26 +119,29 @@ end
 insert
 """
 
-function insert(recipient::BinaryNode, donation::Node, i::Int)
+insert(node::Node, donation::Node, i::Int) = insert(node, donation, i, 1) |> first
+
+function insert(recipient::BinaryNode, donation::Node, i::Int, d::Int)
     if i == 1
-        return BinaryNode(recipient.fun, donation, recipient.right, recipient.addition)
+        return BinaryNode(recipient.fun, donation, recipient.right, recipient.addition), d
     elseif i <= 1 + length(recipient.left)
-        new_left = insert(recipient.left, donation, i - 1)
-        return BinaryNode(recipient.fun, new_left, recipient.right, recipient.addition)
+        new_left, d = insert(recipient.left, donation, i - 1, d+1)
+        return BinaryNode(recipient.fun, new_left, recipient.right, recipient.addition), d
     else
-        new_right = insert(recipient.right, donation, i - 1 - length(recipient.left))
-        return BinaryNode(recipient.fun, recipient.left, new_right, recipient.addition)
+        new_right, d = insert(recipient.right, donation, i - 1 - length(recipient.left), d+1)
+        return BinaryNode(recipient.fun, recipient.left, new_right, recipient.addition), d
     end
 end
 
-insert(recipient::Var, donation::Node, i::Int) = i == 1 ? BinaryNode(+, donation, recipient) : error("Index out of bounds for Var node")
-insert(recipient::Constant, donation::Node, i::Int) = i == 1 ? BinaryNode(+, donation, recipient) : error("Index out of bounds for Zero node")
+insert(recipient::Var, donation::Node, i::Int, d::Int) = BinaryNode(+, donation, recipient), d
+insert(recipient::Constant, donation::Node, i::Int, d::Int) = BinaryNode(+, donation, recipient), d
 
-function insert(recipient::UnaryNode, donation::Node, i::Int)
+function insert(recipient::UnaryNode, donation::Node, i::Int, d::Int)
     if i == 1
-        return UnaryNode(recipient.fun, donation, recipient.addition)
+        return UnaryNode(recipient.fun, donation, recipient.addition), d
     else
-        return UnaryNode(recipient.fun, insert(recipient.child, donation, i - 1), recipient.addition)
+        new_node, d = insert(recipient.child, donation, i-1, d+1)
+        return UnaryNode(recipient.fun, new_node, recipient.addition), d
     end
 end
 
@@ -181,3 +166,8 @@ Base.show(io::IO, node::Constant) = print(io, node.addition.value)
 Base.show(io::IO, node::BinaryNode) = print(io, "(", node.left, " ", node.fun, " ", node.right, ")", node.addition)
 Base.show(io::IO, node::UnaryNode) = print(io, node.fun, "(", node.child, ")", node.addition)
 
+export print_constructive
+print_constructive(v::Var) = "Var($(v.index), $(v.addition.value))"
+print_constructive(c::Constant) = "Constant($(c.addition.value))"
+print_constructive(u::UnaryNode) = "UnaryNode($(u.fun), $(print_constructive(u.child)), AddedValue($(u.addition.value)))"
+print_constructive(b::BinaryNode) = "BinaryNode($(b.fun), $(print_constructive(b.left)), $(print_constructive(b.right)), AddedValue($(b.addition.value)))"

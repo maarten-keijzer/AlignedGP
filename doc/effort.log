@@ -1,10 +1,10 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.6.19)  4 JUL 2026 12:56
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.6.19)  3 JUL 2026 14:37
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
  %&-line parsing enabled.
-**/Users/mkeijzer/work/workspaces/julia2/AlignedGP/doc/techrep.tex
-(/Users/mkeijzer/work/workspaces/julia2/AlignedGP/doc/techrep.tex
+**/Users/mkeijzer/work/workspaces/julia2/AlignedGP/doc/effort.tex
+(/Users/mkeijzer/work/workspaces/julia2/AlignedGP/doc/effort.tex
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
 (/usr/local/texlive/2025/texmf-dist/tex/latex/base/article.cls
@@ -150,8 +150,8 @@ Document Style - pseudocode environments for use with the `algorithmicx' style
 File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count291
 \l__pdf_internal_box=\box56
-) (./techrep.aux)
-\openout1 = `techrep.aux'.
+) (./effort.aux)
+\openout1 = `effort.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 12.
 LaTeX Font Info:    ... okay on input line 12.
@@ -195,56 +195,13 @@ LaTeX Font Info:    Trying to load font information for U+msb on input line 14.
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
 
-LaTeX Warning: Citation `semantic' on page 1 undefined on input line 24.
-
-
-LaTeX Warning: Citation `jaws1' on page 1 undefined on input line 30.
-
-
-LaTeX Warning: Citation `eps-lexicase' on page 1 undefined on input line 32.
+LaTeX Warning: Citation `crossover-bias' on page 1 undefined on input line 20.
 
 
 
 [1
 
-{/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
-Overfull \hbox (9.23663pt too wide) in paragraph at lines 62--63
-[]\OT1/cmr/m/n/10 Over one pe-riod, $[]$ is in-creas-ing on $[\OMS/cmsy/m/n/10 ^^@\OML/cmm/m/it/10 ^^Y=\OT1/cmr/m/n/10 2\OML/cmm/m/it/10 ;  ^^Y=\OT1/cmr/m/n/10 2]$ and de-creas-ing on $[\OML/cmm/m/it/10 ^^Y=\OT1/cmr/m/n/10 2\OML/cmm/m/it/10 ;  \OT1/cmr/m/n/10 3\OML/cmm/m/it/10 ^^Y=\OT1/cmr/m/n/10 2]$.
- []
-
-
-
-[2]
-
-LaTeX Warning: Citation `geometry' on page 3 undefined on input line 82.
-
-
-
-[3]
-
-[4]
-
-[5]
-
-LaTeX Warning: Citation `lexicase' on page 6 undefined on input line 159.
-
-
-LaTeX Warning: Citation `luke' on page 6 undefined on input line 166.
-
-
-LaTeX Warning: Citation `krawiec' on page 6 undefined on input line 177.
-
-
-LaTeX Warning: Citation `bosman' on page 6 undefined on input line 177.
-
-
-LaTeX Warning: Citation `alternatives-in-caching' on page 6 undefined on input line 179.
-
-
-
-[6]
-
-[7] (./techrep.aux)
+{/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] (./effort.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -255,18 +212,18 @@ LaTeX Warning: There were undefined references.
 
  ) 
 Here is how much of TeX's memory you used:
- 3258 strings out of 473190
- 47987 string characters out of 5715800
- 444089 words of memory out of 5000000
- 26486 multiletter control sequences out of 15000+600000
- 569175 words of font info for 75 fonts, out of 8000000 for 9000
+ 3210 strings out of 473190
+ 47115 string characters out of 5715800
+ 436929 words of memory out of 5000000
+ 26443 multiletter control sequences out of 15000+600000
+ 566395 words of font info for 66 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,12n,65p,675b,289s stack positions out of 10000i,1000n,20000p,200000b,200000s
-</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmcsc10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on techrep.pdf (7 pages, 197438 bytes).
+ 57i,6n,65p,765b,220s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb>
+Output written on effort.pdf (1 page, 73508 bytes).
 PDF statistics:
- 108 PDF objects out of 1000 (max. 8388607)
- 66 compressed objects within 1 object stream
+ 38 PDF objects out of 1000 (max. 8388607)
+ 22 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

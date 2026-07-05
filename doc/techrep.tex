@@ -21,19 +21,61 @@
 
 \section{Semantic inversion using intervals}
 
-Semantic crossovers \cite{semantic} uses analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure in general, i.e., a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error when inserted at the root level using that same metric. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
+Semantic backpropagating crossovers \cite{semantic} use analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure in general; a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error at the root level. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
 
-Here, instead of using a squared error or related measure for judging different trees, interval bands are used. The target values are bound with one or more interval bands, each band representing a tolerance for being off-target.  
+Here, instead of using a squared error or related measure for judging different trees, we use interval bands. Target values are bound with one or more interval bands, with each band representing a tolerance for being off-target.  
 
-Given a set of targets $[t_1, \ldots, t_n]$, the symbolic regression problem can be reformulated to hitting targets $[(t_1 - \epsilon, t_1 + \epsilon, \ldots, (t_n - \epsilon, t_n + \epsilon) ]$, or in general hitting a set of intervals $[(l_1, u_1), \ldots, (u_n, l_n)]$ 
+Given a set of targets $[t_1, \ldots, t_n]$, the symbolic regression problem is reformulated to hitting targets $[(t_1 - \epsilon, t_1 + \epsilon, \ldots, (t_n - \epsilon, t_n + \epsilon) ]$, or in general hitting a set of intervals $[(l_1, u_1), \ldots, (u_n, l_n)]$ 
 
-When we use a single band and global $\epsilon$, This metric reduces to Koza's original hits metric \cite{jaws1}.
+When using a single band, the metric reduces to Koza's original hits metric \cite{jaws1}.
 
-When using multiple equally spaced bands ($\epsilon, 2\epsilon, \ldots$), the fitness metric is roughly equivalent to $\epsilon$-lexicase selection \cite{eps-lexicase}. 
+With multiple equally spaced bands ($\epsilon, 2\epsilon, \ldots$), the fitness metric is roughly equivalent to $\epsilon$-lexicase selection \cite{eps-lexicase} with pre-set bands. 
 
-The advantage of using interval inversion is that hits are maintained. If a subtree hits (stabs) a surrogate target's interval, it is guaranteed that the overall tree will also hit the original target, and therefore scores a hit when inserted. The guarantee that the metric is invariant under inversion is absent with different loss functions. 
+The advantage of using interval inversion is that hits are maintained. If a subtree hits (stabs) a surrogate target's interval, it is guaranteed that the overall tree will also hit the original target, and therefore scores a hit when inserted. This guarantees that the metric is invariant under inversion. 
 
 However, using these surrogate targets for selecting sub-trees is not immediately useful. The efficiency gains when doing sub-tree selection at depth $d$ in the tree will only save $d n$ evaluations compared to a naive insertion of these same sub-trees in the overall tree directly, and evaluate it at the root level. 
+
+\section{Computing interval inversions}
+
+Given a node whose output must lie in a target interval $[l, u]$, interval inversion maps that requirement backward through the node's operation to produce a surrogate target for the child subtree. Each of the $n$ data points is handled independently, so the result is a vector of surrogate intervals, one per point.
+
+\subsection{Binary operators: multiplication}
+
+For a node computing $z = x \cdot y$, where the right subtree evaluates to scalar $y_j$ at data point $j$ and the target is $[l_j, u_j]$, the surrogate target for the left subtree is the set of values $x$ satisfying $x \cdot y_j \in [l_j, u_j]$.
+
+When $y_j > 0$, scaling by $1/y_j$ preserves the interval order:
+\[
+  x \in \left[\frac{l_j}{y_j},\; \frac{u_j}{y_j}\right].
+\]
+When $y_j < 0$, multiplication by a negative number reverses the order, so the bounds swap:
+\[
+  x \in \left[\frac{u_j}{y_j},\; \frac{l_j}{y_j}\right].
+\]
+When $y_j = 0$, the product is zero regardless of $x$; the data point carries no information about the left child and contributes an invalid sentinel that is excluded from the stabbing sweep.
+
+As a concrete example, suppose the target at data point $j$ is $[0.5, 1.5]$.  If the right subtree evaluates to $y_j = 2$, the surrogate target for the left child is $[0.25, 0.75]$.  If instead $y_j = -2$, the interval is reflected and the surrogate target becomes $[-0.75, -0.25]$.  The surrogate target for the right subtree is derived symmetrically.
+
+\subsection{Unary operators: sine}
+
+Monotone unary functions produce a single surrogate interval per target interval. Periodic functions are different: because $\sin$ has two monotone branches in each period, inversion produces \emph{two} disjoint surrogate intervals per target interval.
+
+Over one period, $\sin$ is increasing on $[-\pi/2,\,\pi/2]$ and decreasing on $[\pi/2,\,3\pi/2]$. For a target $[l,u] \subseteq [-1, 1]$ the two pre-image branches are:
+\begin{align}
+  \text{Branch 1 (increasing):} &\quad x \in \bigl[\arcsin(l),\;\arcsin(u)\bigr], \label{eq:sin-branch1}\\
+  \text{Branch 2 (decreasing):} &\quad x \in \bigl[\pi - \arcsin(u),\;\pi - \arcsin(l)\bigr]. \label{eq:sin-branch2}
+\end{align}
+Targets that fall entirely outside $[-1, 1]$ are unreachable; an empty set is returned and the data point is excluded from the stabbing sweep.
+
+As a concrete example, consider target $[0.5, 0.8]$.  With $\arcsin(0.5) \approx 0.524$ and $\arcsin(0.8) \approx 0.927$, the two surrogate intervals are:
+\begin{align*}
+  \text{Branch 1:} &\quad [0.524,\;0.927], \\
+  \text{Branch 2:} &\quad [\pi - 0.927,\;\pi - 0.524] \approx [2.214,\;2.618].
+\end{align*}
+Both are genuine pre-images: $\sin(0.7) \approx 0.644$ (Branch~1) and $\sin(2.4) \approx 0.676$ (Branch~2) both lie within $[0.5, 0.8]$.
+
+The two branches represent qualitatively different families of solution. A subtree whose output hovers near $0.7$ and one whose output hovers near $2.4$ are equally valid, and an additive constant that aligns the first may differ substantially from one that aligns the second. Each data point therefore contributes two surrogate intervals to the maximum-overlap stabbing problem rather than one. The algorithm is unchanged; it processes more intervals, and the wider candidate set increases the chance of finding a stabbing constant that covers many points simultaneously.
+
+These two examples cover the mechanics behind all function inversions used here: addition, subtraction and division get similar treatment as multiplication; monotonic functions such as log, exp and sqrt have direct inverses (with bounds check), and functions such as abs and square follow the multi-branch of the sine function. Repeated application of these functions thus scatter the intervals and the number of intervals considered for a single point is capped at 16 intervals.
 
 \section{Maximum overlapping intervals}
 
@@ -45,28 +87,26 @@ Finding an interval that intersects with the maximum number of intervals from a 
 
 Therefore, given a subtree $T$ producing evaluations $x$ against a surrogate target $[(l_1, u_1), ..., (l_n, u_n)]$, the maximum overlapping interval algorithm gives us a range of values $c \in (l,u)$ for which $x + c$ stabs most intervals, i.e., maximizes hits. 
 
-Given the invariance property of interval inversion on the number of hits, this makes it possible to find optimal additive constants anywhere in the tree. So instead of using unguided or gradient search to iteratively find a good constant, we can directly compute the optimal constant(s) in $O(n log n)$ time. When this routine is used for crossover or mutation, it will ensure that the tree will be brought into the right range, stabbing at least one interval, and fully destructive crossovers are no longer possible.
+Given the invariance property of interval inversion on the number of hits, this makes it possible to find optimal additive constants anywhere in the tree. Instead of using unguided or gradient search to iteratively find a good constant, the optimal constant(s) can be found in $O(n log n)$ time. When this routine is used for crossover or mutation, it will ensure that a new subtree will be brought into the right range, stabbing at least one interval. Fully destructive crossovers are no longer possible.
 
-Finding also the scale instead of just the intercept would be great, butl inear stabbing algorithms have complexity $O(n^2)$, and are therefore too expensive to run in the inner loop of a symbolic regression algorithm.
+Finding also the scale instead of just the intercept has complexity $O(n^2)$, and is therefore too expensive to run in the inner loop of a symbolic regression algorithm.
 
 \subsection{Selecting stabbing constants}
 \label{sec:selecting}
 
-The maximum interval overlap routine returns one or more intervals. Any value within that range is a valid constant for maximizing the number of hits. When selecting a constant, it is first checked if the value 0 is part of the range. If so, that value is chosen as it has a positive effect on structural complexity (x + 0 = x).
+The maximum interval overlap routine returns one or more intervals. Any value within that range is a valid constant for maximizing the number of hits. When selecting a constant, it is first checked if the value 0 is part of the range. If that is the case, the value is chosen for the constant because it reduces structural complexity (x + 0 = x).
 
-If that is not the case, another check is performed to see if there are integers that are optimal. If there are such integers, an integer is drawn uniformly from the intervals. This implements a preferential bias towards integer constants. 
+Otherwise, another check is performed to see if there are integers that are optimal. If there are such integers, an integer is drawn uniformly from the intervals. This implements a preferential bias towards integer constants. 
 
-Finally, if there is no zero, nor integers in the range, a constant is drawn uniformly from the ranges. 
+Finally, if there is no zero, nor integers in the range, a constant is drawn uniformly from the allowable ranges. 
 
 \section{Stabbing crossover and mutations}
 
-Using the machinery of interval inversion and constant stabbing, corresponding crossover and mutation operators are defined using an {\bf aligned-insert} routine. It inserts the tree at a position and computes the optimal stabbing range from which a constant is drawn from the insertion location upwards towards the root. By drawing from the ranges, new optimal constants are tried out which might make the search in other branches easier (or harder.) Systematic varying the constants in the allowable range implements a form of coordinate descent on all constants in the tree.
+Using the machinery of interval inversion and constant stabbing, corresponding crossover and mutation operators are defined using an {\bf aligned-insert} routine. It inserts the tree at a position, adds an optimal constant to put it in range, and repeats this on the path upward, drawing fresh constants along the way. Redrawing constants repositions the surrogate targets for other branches, possibly making the overall problem easier to solve. 
 
-A node in this system then has its normal payload together with an additive constant optimized by stabbing.
+\subsection{The recursive-stab algorithm}
 
-\subsection{The aligned-insert algorithm}
-
-Every node carries an additive constant $c$, so a node with function $f$ evaluates as $f(\cdot) + c$. The algorithm recurses from the root of $R$ toward position $i$, propagating surrogate targets downward and updated evaluations upward, re-optimising each ancestor's additive constant on the way back.
+Every node carries an additive constant $c$, so a node with function $f$ evaluates as $f(\cdot) + c$. The algorithm recurses from the root of $R$ toward position $i$, propagating surrogate targets downward and updated evaluations upward, re-optimising each ancestor's additive constant on the way back. 
 
 \begin{algorithm}
 \caption{$\textsc{AlignedInsert}(N, D, i, \mathbf{x}, \mathcal{T})$}
@@ -112,7 +152,7 @@ $\textsc{MaxOverlap}$ runs the $O(n \log n)$ interval-stabbing sweep and returns
 The previous sections laid out the main contribution of the paper. This section provides further algorithmic details and describes the experimental setup.
 
 \paragraph{Structural complexity}
-The structural complexity of a tree is computed as the number of nodes in a tree. As every node has an accompanying constant, an extra count for a non-zero constant is added to the structural complexity of a tree. Nodes with constants value zero thus get no penalty, while non-zero constants do. 
+The structural complexity of a tree is computed as the number of nodes in a tree. As every node has an accompanying constant, an extra count for a non-zero constant is added to the structural complexity of a tree.
 
 \paragraph{Complexity stratification and Lexicase selection}
 
@@ -120,31 +160,35 @@ In our experiments, simple Lexicase selection \cite{lexicase} is used to select 
 
 Size strata are chosen at random: the first stratum uniformly, and in the case of crossover, the second parent uniformly within plus or minus 10 complexity points from the first parent.
 
-The resulting offspring is placed in the stratum corresponding to their structural complexity. After this, the stratum with most individuals is selected. An inverse lexicase is held in the stratum to identify a member for deletion. This keeps the strata well-populated with an equal number of individuals in each stratum.
+The resulting offspring is placed in the stratum corresponding to their structural complexity. After this, to keep the strata equally occupied, the stratum with most individuals is selected. A naturally elitist inverse tournament of size 2 on hits is held to identify a member for deletion. 
 
 \paragraph{Initialization}
-To create an initial population, probabilistic tree creation \cite{luke} is used. If population size allows, every straturm is initialized with the same number of initial trees. There is no attempt to find optimal constants of these trees. THey are initialized as regular trees with random constants drawn from a Cauchy distribution (randn()/randn()).  
+To create an initial population, probabilistic tree creation \cite{luke} is used. If population size allows, every straturm is initialized with the same number of initial trees. There is no attempt to find optimal constants of these trees. THey are initialized as regular trees with random constants drawn from a Cauchy distribution by dividing two independent draws from a Gaussian (randn()/randn()).  
 
+\paragraph{Variation}
+Insert locations are chosen using Koza's 90/10 rule, and subtree crossovers are applied 80\% of the time; otherwise a size fair subtree mutation is used.
+
+With this setup, the only difference between a regular symbolic regression system and the system under study is the aligned-insert routine. 
 
 \subsection{Estimating computational effort}
 
-Comparing different symbolic regression systems for their efficiency to reach a certain level of performance is not straightforward. Standard metrics such as the number of individuals processed ignore important factors such as the number of fitness cases, the number of evaluations per individual, and the complexity of the individuals. A run that keeps average population size low can run many orders faster than a run that is allowed to bloat, yet in individuals processed they can be considered equal.
+Comparing different symbolic regression systems for their computational efficiency to reach a certain level of performance is not straightforward. Standard metrics such as the number of individuals processed ignore important factors such as the number of fitness cases, the number of evaluations per individual, and the complexity of the individuals. A run that keeps average population size low can run many orders faster than a run that is allowed to bloat. Counting individuals processed does not distinguish those
 
-Therefore, many comparisons are done on wall-clock time \cite{bosman}, but this is hardware dependent, language dependent, implementation dependent, and can be affected by many other factors. At best, this gives a rough indication of efficiency, but it is not a reliable measure. Although wall-clock speed is important 
+Therefore, many comparisons are done on wall-clock time \cite{krawiec, bosman}, but this is hardware, language, and implementation dependent. Although it is suitable for comparing alternative approaches within the same symbolic regression engine, programmed by the same developer, it does not allow for algorithmic comparison. 
 
 A natural measure for computational effort is the number of evaluations performed. It would therefore be tempting to use the size of the population times the number of fitness cases as a measure of effort. Every new individual processed would be considered to be freshly evaluated. However, evaluations can be cached, and dramatic speedups can be achieved doing this, particularly when caching is used with algorithms that heavily share subtrees (e.g., use subtree crossover almost exclusively)  \cite{alternatives-in-caching}.
 
-A useful observation is that under assumptions of optimal caching, only new subtrees need to be evaluated. It is furthermore useful to ignore duplication effects where the same subtree is inserted at the same location in the same tree, and assume that every subtree inserted in a tree will lead to new evaluations from the insertion point upwards to the root. This was denoted by $d$ above.
+A useful observation is that under assumptions of optimal caching, only new subtrees need to be evaluated. It is furthermore useful to ignore duplication effects where the same subtree is inserted at the same location in the same tree, and assume that every subtree inserted in a tree will lead to new evaluations from the insertion point upwards to the root. 
 
-Therefore, a subtree crossover at depth $d$ will add $d n$ to the overall evaluation count, and a subtree mutation inserting an (assumed new and unique) subtree of size $s$ at depth $d$ will add $(d + s) n$ to the overall evaluation count.
+This gives a clear set of measurements to track. 
 
-Tracking all these insertion points and subtree sizes might be intrusive for an implementation, therefore a further, theoretically justified, simplification is used. Under assumptions of uniform selection of insertion points, together with a mutation operator that on average replaces a subtree with the same size as the original, the average depth of insertion as well as the average size of the inserted subtree can be tracked by keeping track of total path length and size of individual trees. As shown in \cite{crossover-bias}, the average depth of a tree is equal to the average size of the tree, and are equal to the total path length divided by the total size of the tree. 
+A subtree crossover at depth $d$ will add $d n$ to the overall evaluation count, and a subtree mutation inserting an (assumed new and unique) subtree of size $s$ at depth $d$ will add $(d + s) n$ to the overall evaluation count. These mutations are thus more expensive than crossovers. Computational effort is then measured in node-evaluations, or {\bf nods} for short, and effort will be measured in mega-nods (Mnods).
 
-Using this, the expected depth, $\bar{d}$ for an event can be directly computed from total path length and size of the trees undergoing crossover and mutation.
+Under this definition of computational effort, an aligned insert, optimizing constants, costs $d n \log n$, with subtree mutation adding and additional $s n$, thus costing $s n + d n \log n$. Finding optimal constants as studied here, costs a factor of $\log n$, and for the method to be considered succesful, it will need to outperform standard methods in a comparable computational budget. 
 
-In the algorithm studied here, each aligned insert requires $\bar{d} n \log n$ evaluations, which is a factor of $\log n$ more expensive than standard insertion. That is the computational effort that will be tracked in the experiments, and the question is whether the improved search efficiency of the aligned insert will outweigh the increased cost per insertion. Wall-clock time is also tracked as a control.
 
-So our bookkeeping is the following. For regular crossover, compute $\bar{d}$ for the receiving parent, and add $\bar{d} n$ to the total computational effort. For regular mutation, compute $\bar{d}$ for the parent, and add $2 \bar{d} n$ to the total computational effort. For aligned crossover, compute $\bar{d}$ for the receiving parent, and add $\bar{d} n \log n]$ to the total computational effort. For aligned insert mutation add $\bar{d} n )1 + \log n)$ to the total computational effort. 
+
+
 
 
 

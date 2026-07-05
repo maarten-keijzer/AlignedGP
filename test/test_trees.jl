@@ -1,48 +1,54 @@
 using AlignedGP
 using Test
-using Intervals
 
 import AlignedGP: evaluate
 
-const CI = Interval{Float64,Closed,Closed}
+const CI = CInterval
 
 @testset "AddedValue" begin
     av = AddedValue(3.0)
     @test av.value == 3.0
-    @test length(av) == 1
+    @test complexity(av) == 1
 
     av_zero = AddedValue(0.0)
-    @test length(av_zero) == 0
+    @test complexity(av_zero) == 0
 
-    region = IntervalSet(CI(1.0, 2.0))
+    region = CIntervals(CI(1.0, 2.0))
     av2 = AddedValue(region, 1.5)
     @test av2.value == 1.5
     @test av2.allowed_intervals == region
 end
 
-@testset "Node construction and length" begin
+@testset "Node construction, length and complexity" begin
     v = Var(1)
     @test v.index == 1
     @test length(v) == 1
+    @test complexity(v) == 1
 
     v_added = Var(2, AddedValue(1.0))
-    @test length(v_added) == 2
+    @test length(v_added) == 1
+    @test complexity(v_added) == 2
 
     c = Constant(5.0)
     @test length(c) == 1
+    @test complexity(c) == 1
 
     c_zero = Constant()
     @test length(c_zero) == 1
+    @test complexity(c_zero) == 1  # zero constant still counts — it IS the value
 
     bn = BinaryNode(+, Var(1), Var(2))
     @test length(bn) == 3
+    @test complexity(bn) == 3
 
     bn_nested = BinaryNode(*, bn, Constant(2.0))
     @test length(bn_nested) == 5
+    @test complexity(bn_nested) == 5
 
-    # nonzero addition counts as one extra node
+    # nonzero addition adds 1 to complexity but not to structural length
     bn_added = BinaryNode(+, Var(1), Var(2), AddedValue(1.0))
-    @test length(bn_added) == 4
+    @test length(bn_added) == 3
+    @test complexity(bn_added) == 4
 end
 
 @testset "evaluate nodes" begin
@@ -84,7 +90,7 @@ end
     x_neg = [[-1.0, -2.0, -3.0]]
     sqrt_tree = Tree(UnaryNode(sqrt, Var(1)), BitVector())
     result = evaluate(sqrt_tree, x_neg)
-    @test all(isinf, result)
+    @test all(isnan, result)
     @test length(result) == 3
 end
 
@@ -172,19 +178,22 @@ end
     @test sprint(show, BinaryNode(+, Var(1), Var(2), AddedValue(1.0))) == "(x[1] + x[2]) + 1.0"
 end
 
-@testset "UnaryNode construction and length" begin
+@testset "UnaryNode construction, length and complexity" begin
     u = UnaryNode(sqrt, Var(1))
     @test u.fun === sqrt
     @test u.child === Var(1)
     @test length(u) == 2   # 1 (self) + 1 (Var)
+    @test complexity(u) == 2
 
     u_added = UnaryNode(exp, Var(2), AddedValue(3.0))
     @test u_added.fun === exp
-    @test length(u_added) == 3   # nonzero addition counts as one extra node
+    @test length(u_added) == 2   # nonzero addition does not affect structural length
+    @test complexity(u_added) == 3   # but does add 1 to complexity
 
     # UnaryNode wrapping a BinaryNode child
     u_deep = UnaryNode(log, BinaryNode(+, Var(1), Var(2)))
     @test length(u_deep) == 4   # 1 + 3
+    @test complexity(u_deep) == 4
 end
 
 @testset "UnaryNode evaluate" begin
@@ -206,8 +215,8 @@ end
 
 @testset "UnaryNode DomainError via Tree" begin
     x_neg = [[-1.0, -2.0, -3.0]]
-    @test all(isinf, evaluate(Tree(UnaryNode(sqrt, Var(1)), BitVector()), x_neg))
-    @test all(isinf, evaluate(Tree(UnaryNode(log, Var(1)), BitVector()), x_neg))
+    @test all(isnan, evaluate(Tree(UnaryNode(sqrt, Var(1)), BitVector()), x_neg))
+    @test all(isnan, evaluate(Tree(UnaryNode(log, Var(1)), BitVector()), x_neg))
 end
 
 @testset "UnaryNode getindex" begin

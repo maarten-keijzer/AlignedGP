@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\title{Computational Effort}
+\author{Maarten Keijzer}
+\date{July 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+\subsubsection{Alternative, not used}
+Tracking all insertion points and subtree sizes can be intrusive for an implementation, therefore a further, theoretically justified, simplification is used. Under assumptions of uniform selection of insertion points, together with a mutation operator that on average replaces a subtree with the same size as the original, the average depth of insertion as well as the average size of the inserted subtree can be tracked by keeping track of total path length and size of individual trees. As shown in \cite{crossover-bias}, the average depth of a tree is equal to the average size of the tree, and are equal to the total path length divided by the total size of the tree. 
+
+Using this, the expected depth, $\bar{d}$ for an event can be directly computed from total path length and size of the trees undergoing crossover and mutation.
+
+In the algorithm studied here, each aligned insert requires $\bar{d} n \log n$ evaluations, which is a factor of $\log n$ more expensive than standard insertion. That is the computational effort that will be tracked in the experiments, and the question is whether the improved search efficiency of the aligned insert will outweigh the increased cost per insertion. Wall-clock time is also tracked as a control.
+
+So our bookkeeping is the following. For regular crossover, compute $\bar{d}$ for the receiving parent, and add $\bar{d} n$ to the total computational effort. For regular mutation, compute $\bar{d}$ for the parent, and add $2 \bar{d} n$ to the total computational effort. For aligned crossover, compute $\bar{d}$ for the receiving parent, and add $\bar{d} n \log n]$ to the total computational effort. For aligned insert mutation add $\bar{d} n )1 + \log n)$ to the total computational effort. 
+
+
+
+\end{document}
