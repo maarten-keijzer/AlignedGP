@@ -25,3 +25,6 @@ end
 @testset "Linear Scaling" begin
     include("test_linear_scaling.jl")
 end
+@testset "Circular Stab" begin
+    include("test_circular_stab.jl")
+end

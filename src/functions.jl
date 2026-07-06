@@ -208,3 +208,46 @@ end
 
 inverse(::typeof(cos), cis::CIntervals) = _lift_inverse_multi(cos, cis)
 inverse(::typeof(sin), cis::CIntervals) = _lift_inverse_multi(sin, cis)
+
+# Circular preimage helpers for periodic functions (sin/cos).
+# Returns arcs in [0,2π) as Vector{Tuple{Float64,Float64}}.
+
+is_periodic(fn) = fn === sin || fn === cos
+
+# Reduce arc [start,stop] (real line, length ≤ 2π) to [0,2π), splitting at the seam if needed.
+function _emit(start::Float64, stop::Float64)
+    s = mod(start, 2π)
+    e = s + (stop - start)
+    e <= 2π ? Tuple{Float64,Float64}[(s, e)] : Tuple{Float64,Float64}[(s, 2π), (0.0, e - 2π)]
+end
+
+# Merge adjacent/overlapping arcs (assumes input already sorted by start).
+function _coalesce_arcs(arcs::Vector{Tuple{Float64,Float64}})
+    isempty(arcs) && return arcs
+    sort!(arcs; by=first)
+    out = Tuple{Float64,Float64}[first(arcs)]
+    for (s, e) in Iterators.drop(arcs, 1)
+        rs, re = last(out)
+        s <= re ? (out[end] = (rs, max(re, e))) : push!(out, (s, e))
+    end
+    out
+end
+
+# One-period preimage of target ⊆ [-1,1] under sin, as arcs in [0,2π).
+# Implements the algo sketch: rising branch emit(aL,aH) + falling branch emit(π-aH,π-aL).
+function _preimage_circular(::typeof(sin), t::CInterval)
+    lo_c = max(-1.0, t.lo); hi_c = min(1.0, t.hi)
+    lo_c > hi_c && return Tuple{Float64,Float64}[]
+    lo_c == -1.0 && hi_c == 1.0 && return Tuple{Float64,Float64}[(0.0, 2π)]
+    aL = asin(lo_c); aH = asin(hi_c)   # both in [-π/2, π/2], aL ≤ aH
+    _coalesce_arcs(vcat(_emit(aL, aH), _emit(π - aH, π - aL)))
+end
+
+# One-period preimage for cos, arcs in [0,2π).
+function _preimage_circular(::typeof(cos), t::CInterval)
+    lo_c = max(-1.0, t.lo); hi_c = min(1.0, t.hi)
+    lo_c > hi_c && return Tuple{Float64,Float64}[]
+    lo_c == -1.0 && hi_c == 1.0 && return Tuple{Float64,Float64}[(0.0, 2π)]
+    aL = acos(hi_c); aH = acos(lo_c)   # aL ≤ aH in [0, π]
+    _coalesce_arcs(vcat(_emit(aL, aH), _emit(2π - aH, 2π - aL)))
+end

@@ -325,3 +325,64 @@ end
     r2 = inverse(cos, cis2)
     @test length(r2) == 2   # only the valid sub-interval contributes branches
 end
+
+@testset "preimage_circular sin" begin
+    # Whole circle
+    r = AlignedGP._preimage_circular(sin, CI(-1.0, 1.0))
+    @test length(r) == 1
+    @test r[1][1] ≈ 0.0 atol=1e-10
+    @test r[1][2] ≈ 2π  atol=1e-10
+
+    # Out of range → empty
+    @test isempty(AlignedGP._preimage_circular(sin, CI(1.5, 2.0)))
+    @test isempty(AlignedGP._preimage_circular(sin, CI(-3.0, -1.5)))
+
+    # Clamped target (includes peak): two arcs merge into one
+    r_peak = AlignedGP._preimage_circular(sin, CI(0.5, 2.0))
+    @test length(r_peak) == 1
+    x = (r_peak[1][1] + r_peak[1][2]) / 2
+    @test sin(x) >= 0.5 - 1e-10
+
+    # Clamped target (includes trough): arcs connect through 3π/2
+    r_trough = AlignedGP._preimage_circular(sin, CI(-2.0, -0.5))
+    @test length(r_trough) == 1
+    x = (r_trough[1][1] + r_trough[1][2]) / 2
+    @test sin(x) <= -0.5 + 1e-10
+
+    # Fully inside [-1,1]: rising branch wraps across 0/2π → 3 arcs on [0,2π).
+    # Arc layout: [0,π/6] (rising near 0), [5π/6,7π/6] (falling), [11π/6,2π] (rising near 2π).
+    r2 = AlignedGP._preimage_circular(sin, CI(-0.5, 0.5))
+    @test length(r2) == 3
+    for (a, b) in r2
+        x = (a + b) / 2
+        @test -0.5 <= sin(x) <= 0.5 + 1e-10
+    end
+
+    # All arcs are within [0, 2π)
+    for target in [CI(-0.5, 0.5), CI(0.0, 1.0), CI(-1.0, 0.0)]
+        for (a, b) in AlignedGP._preimage_circular(sin, target)
+            @test 0.0 <= a <= 2π + 1e-10
+            @test 0.0 <= b <= 2π + 1e-10
+            @test a <= b
+        end
+    end
+end
+
+@testset "preimage_circular cos" begin
+    # Whole circle
+    r = AlignedGP._preimage_circular(cos, CI(-1.0, 1.0))
+    @test length(r) == 1
+    @test r[1][1] ≈ 0.0 atol=1e-10
+    @test r[1][2] ≈ 2π  atol=1e-10
+
+    # Out of range → empty
+    @test isempty(AlignedGP._preimage_circular(cos, CI(1.5, 2.0)))
+
+    # Fully inside [-1,1]: two arcs
+    r2 = AlignedGP._preimage_circular(cos, CI(-0.5, 0.5))
+    @test length(r2) == 2
+    for (a, b) in r2
+        x = (a + b) / 2
+        @test -0.5 <= cos(x) <= 0.5 + 1e-10
+    end
+end
