@@ -3,3 +3,14 @@ Manifest.toml
 *.jl.*.cov
 *.jl.mem
 /docs/build/
+
+# Experiment output data
+/data/
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.pdf
+*.synctex.gz
