@@ -194,4 +194,17 @@ end
         end
     end
 
+    @testset "very large finite intervals whose widths sum to Inf — no crash" begin
+        # Two fully-finite intervals that don't contain 0, both with abs(bound) >= 9e18.
+        # Their widths each approach prevfloat(Inf), so sum(widths) overflows to Inf.
+        # Before the fix: finite_bounds stayed empty → rand(rng, []) crashed.
+        big = prevfloat(Inf)
+        region = CIntervals([CI(1.0e19, big), CI(2.0e19, big)])
+        rng = Random.MersenneTwister(42)
+        for _ in 1:10
+            c = select_constant(region, rng)
+            @test c in region
+        end
+    end
+
 end

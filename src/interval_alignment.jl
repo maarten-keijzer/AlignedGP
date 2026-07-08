@@ -74,7 +74,12 @@ function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
     for iv in region.items
         lo, hi = iv.lo, iv.hi
         if isfinite(lo) && isfinite(hi)
-            abs(lo) < 9.0e18 && abs(hi) < 9.0e18 || continue
+            if abs(lo) >= 9.0e18 || abs(hi) >= 9.0e18
+                # Very large finite bounds: hi-lo may overflow to Inf.
+                # Record the bound closest to 0 so the !isfinite(total) fallback works.
+                push!(finite_bounds, abs(lo) <= abs(hi) ? lo : hi)
+                continue
+            end
             r = ceil(Int, lo):floor(Int, hi)
             isempty(r) || push!(int_ranges, r)
         elseif isfinite(hi)      # CI(-Inf, hi): 0 not in region so hi < 0
