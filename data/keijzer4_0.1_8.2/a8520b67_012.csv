@@ -1,0 +1,14 @@
+# method=RecursiveStab
+# population_size=5000
+# max_complexity=150
+# cross_mut_prob=0.8
+# max_lexicase_comparisons=100
+# use_l2_scaling=true
+# constant_stab_probability=0.2
+# use_tournament_stratum=false
+# n_targets=101
+time_running,eff,maxhits
+4.275483131408691,3.696901661305724e7,75
+9.059756994247437,4.697273911552912e7,78
+11.280678987503052,5.6974331602204934e7,92
+13.340893030166626,6.697636278635093e7,101

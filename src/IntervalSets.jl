@@ -15,6 +15,7 @@ function narrow(lo, hi)
     lo_n = isinf(lo) ? lo : nextfloat(lo)
     hi_n = isinf(hi) ? hi : prevfloat(hi)
     lo_n > hi_n && return invalid_interval  # sub-ULP interval: no float strictly inside
+    (hi_n - lo_n) <= 2eps(lo_n) && return invalid_interval # want two eps boundaries
     CInterval(lo_n, hi_n)
 end
 
@@ -42,6 +43,10 @@ Base.:+(ci::CInterval, s::Real) = _is_invalid(ci) ? ci : narrow(ci.lo + s, ci.hi
 Base.:+(s::Real, ci::CInterval) = _is_invalid(ci) ? ci : narrow(s + ci.lo, s + ci.hi)
 Base.:-(ci::CInterval, s::Real) = _is_invalid(ci) ? ci : narrow(ci.lo - s, ci.hi - s)
 Base.:-(s::Real, ci::CInterval) = _is_invalid(ci) ? ci : narrow(s - ci.hi, s - ci.lo)
+
+Base.:*(ci::CInterval, s::Real) = _is_invalid(ci) ? ci : narrow(ci.lo * s, ci.hi * s)
+Base.:*(s::Real, ci::CInterval) = ci * s
+
 
 const MAX_SUBINTERVALS = 16
 
@@ -150,6 +155,12 @@ function Base.:-(s::Real, cis::CIntervals)
     cis.n == 0 && return cis
     cis.n == 1 && return CIntervals(s - cis._solo)
     CIntervals([s - ci for ci in cis._multi])
+end
+
+function Base.:*(cis::CIntervals, s::Real)
+    cis.n == 0 && return cis
+    cis.n == 1 && return CIntervals(cis._solo * s)
+    CIntervals([ci * s for ci in cis._multi])
 end
 
 Base.show(io::IO, ci::CInterval) = print(io, "<$(ci.lo),$(ci.hi)>")

@@ -5,7 +5,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
-\title{Improving Symbolic Regression with Interval Inversion and Constant Stabbing}
+\title{Constant Stabbing}
 \author{Maarten Keijzer}
 \date{July 2026}
 
@@ -21,7 +21,7 @@
 
 \section{Semantic inversion using intervals}
 
-Semantic backpropagating crossovers \cite{semantic} use analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure in general; a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error at the root level. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
+Semantic backpropagating \cite{semantic} use analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure in general; a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error at the root level. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
 
 Here, instead of using a squared error or related measure for judging different trees, we use interval bands. Target values are bound with one or more interval bands, with each band representing a tolerance for being off-target.  
 
@@ -31,53 +31,15 @@ When using a single band, the metric reduces to Koza's original hits metric \cit
 
 With multiple equally spaced bands ($\epsilon, 2\epsilon, \ldots$), the fitness metric is roughly equivalent to $\epsilon$-lexicase selection \cite{eps-lexicase} with pre-set bands. 
 
-The advantage of using interval inversion is that hits are maintained. If a subtree hits (stabs) a surrogate target's interval, it is guaranteed that the overall tree will also hit the original target, and therefore scores a hit when inserted. This guarantees that the metric is invariant under inversion. 
+The advantage of using interval inversion is that hits are maintained during semantic inversion. If a subtree hits (stabs) a surrogate target's interval, it is guaranteed that the overall tree will also hit the original target, and therefore scores a hit when inserted. The hits metric is invariant under inversion. 
 
-However, using these surrogate targets for selecting sub-trees is not immediately useful. The efficiency gains when doing sub-tree selection at depth $d$ in the tree will only save $d n$ evaluations compared to a naive insertion of these same sub-trees in the overall tree directly, and evaluate it at the root level. 
+However, using these surrogate targets for selecting possible sub-trees is not immediately useful. The efficiency gains when doing sub-tree selection at depth $d$ in the tree will only save $d n$ evaluations compared to a naive insertion of these same sub-trees in the overall tree directly, and evaluate it at the root level. Methods like AGX \cite{krawiec} use kd-trees to efficiently search through a library of potential subtrees to make te effort put in inversion pay off. 
 
 \section{Computing interval inversions}
 
 Given a node whose output must lie in a target interval $[l, u]$, interval inversion maps that requirement backward through the node's operation to produce a surrogate target for the child subtree. Each of the $n$ data points is handled independently, so the result is a vector of surrogate intervals, one per point.
 
-\subsection{Binary operators: multiplication}
-
-For a node computing $z = x \cdot y$, where the right subtree evaluates to scalar $y_j$ at data point $j$ and the target is $[l_j, u_j]$, the surrogate target for the left subtree is the set of values $x$ satisfying $x \cdot y_j \in [l_j, u_j]$.
-
-When $y_j > 0$, scaling by $1/y_j$ preserves the interval order:
-\[
-  x \in \left[\frac{l_j}{y_j},\; \frac{u_j}{y_j}\right].
-\]
-When $y_j < 0$, multiplication by a negative number reverses the order, so the bounds swap:
-\[
-  x \in \left[\frac{u_j}{y_j},\; \frac{l_j}{y_j}\right].
-\]
-When $y_j = 0$, the product is zero regardless of $x$; the data point carries no information about the left child and contributes an invalid sentinel that is excluded from the stabbing sweep.
-
-As a concrete example, suppose the target at data point $j$ is $[0.5, 1.5]$.  If the right subtree evaluates to $y_j = 2$, the surrogate target for the left child is $[0.25, 0.75]$.  If instead $y_j = -2$, the interval is reflected and the surrogate target becomes $[-0.75, -0.25]$.  The surrogate target for the right subtree is derived symmetrically.
-
-\subsection{Unary operators: sine}
-
-Monotone unary functions produce a single surrogate interval per target interval. Periodic functions are different: because $\sin$ has two monotone branches in each period, inversion produces \emph{two} disjoint surrogate intervals per target interval.
-
-Over one period, $\sin$ is increasing on $[-\pi/2,\,\pi/2]$ and decreasing on $[\pi/2,\,3\pi/2]$. For a target $[l,u] \subseteq [-1, 1]$ the two pre-image branches are:
-\begin{align}
-  \text{Branch 1 (increasing):} &\quad x \in \bigl[\arcsin(l),\;\arcsin(u)\bigr], \label{eq:sin-branch1}\\
-  \text{Branch 2 (decreasing):} &\quad x \in \bigl[\pi - \arcsin(u),\;\pi - \arcsin(l)\bigr]. \label{eq:sin-branch2}
-\end{align}
-Targets that fall entirely outside $[-1, 1]$ are unreachable; an empty set is returned and the data point is excluded from the stabbing sweep.
-
-As a concrete example, consider target $[0.5, 0.8]$.  With $\arcsin(0.5) \approx 0.524$ and $\arcsin(0.8) \approx 0.927$, the two surrogate intervals are:
-\begin{align*}
-  \text{Branch 1:} &\quad [0.524,\;0.927], \\
-  \text{Branch 2:} &\quad [\pi - 0.927,\;\pi - 0.524] \approx [2.214,\;2.618].
-\end{align*}
-Both are genuine pre-images: $\sin(0.7) \approx 0.644$ (Branch~1) and $\sin(2.4) \approx 0.676$ (Branch~2) both lie within $[0.5, 0.8]$.
-
-The two branches represent qualitatively different families of solution. A subtree whose output hovers near $0.7$ and one whose output hovers near $2.4$ are equally valid, and an additive constant that aligns the first may differ substantially from one that aligns the second. Each data point therefore contributes two surrogate intervals to the maximum-overlap stabbing problem rather than one. The algorithm is unchanged; it processes more intervals, and the wider candidate set increases the chance of finding a stabbing constant that covers many points simultaneously.
-
-These two examples cover the mechanics behind all function inversions used here: addition, subtraction and division get similar treatment as multiplication; monotonic functions such as log, exp and sqrt have direct inverses (with bounds check), and functions such as abs and square follow the multi-branch of the sine function. Repeated application of these functions thus scatter the intervals and the number of intervals considered for a single point is capped at 16 intervals.
-
-\section{Maximum overlapping intervals}
+\section{Stabbing}
 
 Stabbing problems are studied in computational geometry to find the number of areas a ray, line, or general shape intersects with \cite{geometry}. 
 
@@ -99,6 +61,147 @@ The maximum interval overlap routine returns one or more intervals. Any value wi
 Otherwise, another check is performed to see if there are integers that are optimal. If there are such integers, an integer is drawn uniformly from the intervals. This implements a preferential bias towards integer constants. 
 
 Finally, if there is no zero, nor integers in the range, a constant is drawn uniformly from the allowable ranges. 
+
+\section{Monotone-Chain inveriant for sequential offset stabs}
+
+In a symbolic-regression system where subtree constants are found by
+sequential (Gauss–Seidel) offset stabbing against exact per-point surrogate
+targets, the number of hit intervals is non-decreasing at every stab. 
+
+\subsection{Setup and notation}
+Fix data points $\mathbf{x}_1,\dots,\mathbf{x}_n$ and target sets
+$t_1,\dots,t_n \subseteq \mathbb{R}$. The targets may be intervals, unions of
+intervals, or unions of rays.
+
+Adjoin a symbol $\bot$ for "undefined" (e.g. division by zero) and decree
+
+$$\bot \notin t_i \quad \text{for all } i.$$
+
+For an expression $E$, write $E(\mathbf{x}_i) \in \mathbb{R}\cup\{\bot\}$ for its
+evaluation on point $i$, and define the hit count
+
+$$\text{hits}(E) := \bigl|\{\, i : E(\mathbf{x}_i) \in t_i \,\}\bigr|.$$
+
+**Context function.** Let $T$ be the current tree and $p$ a node position in it.
+For each point $i$, define
+
+$$g_i^p : \mathbb{R} \to \mathbb{R}\cup\{\bot\}$$
+
+as the map sending *the value produced at node $p$* to *the value produced at the
+root*, with every other input and subtree frozen at its value for point $i$.
+Concretely: evaluate $T$ at $\mathbf{x}_i$, but replace the subtree at $p$ by a
+free variable $u$. The result is a fixed partial function of $u$, with
+$g_i^p(u)=\bot$ wherever downstream evaluation is undefined.
+
+Let $v_i^p$ be the actual value of the subtree at $p$ on point $i$, so that
+
+\[g_i^p(v_i^p) = T(\mathbf{x}_i). \tag{1}\]
+
+\paragraph{Exact preimage surrogate} Define
+
+\[
+S_i^p := (g_i^p)^{-1}(t_i) = \{\, u \in \mathbb{R} : g_i^p(u) \in t_i \,\}. \tag{2}
+\]
+
+$S_i^p$ is exactly the set of
+node-$p$ outputs that make point $i$ a hit. Because $\bot \notin t_i$, every $u$
+producing an undefined result is automatically excluded from $S_i^p$.
+
+\paragraph{The stab} We stab an additive offset $c$ at node $p$: replace the subtree
+$s$ at $p$ by $s + c$. The node's output on point $i$ becomes $v_i^p + c$, so
+point $i$ is hit iff $v_i^p + c \in S_i^p$, i.e. iff $c \in S_i^p - v_i^p$. The
+max-overlap routine returns
+
+\[
+c^\ast \in \arg\max_{c\in\mathbb{R}}
+\bigl|\{\, i : c \in S_i^p - v_i^p \,\}\bigr|,
+\qquad M := \text{that maximum count.} \tag{3}
+\]
+
+---
+
+\subsection{Assumptions}
+
+- **(A1) Exactness.** The surrogate the implementation feeds to the stabber
+  equals $S_i^p$ in (2) — the true preimage of $t_i$ under $g_i^p$.
+- **(A2) Correct stabbing.** The routine returns a point $c^\ast$ attaining the
+  true maximum overlap $M$ of the sets $\{S_i^p - v_i^p\}_i$, and reports that
+  count. Random selection within the argmax region is fine: every point of the
+  argmax region attains $M$ by definition.
+
+These are the **only** assumptions. (A1) is the one division can violate in an
+implementation. Notice that the proof below does not touch it — which is exactly
+why any observed violation is a bug in the surrogate computation, not a gap in
+the theorem.
+
+---
+
+\paragraph{Lemma 1 — Stab count equals resulting hits}
+
+**Statement.** Let $T'$ be $T$ with node $p$ replaced by $s + c^\ast$. Then
+$\text{hits}(T') = M$.
+
+**Proof.** In $T'$, node $p$ outputs $v_i^p + c^\ast$ on point $i$, so the root
+outputs $g_i^p(v_i^p + c^\ast)$. Hence
+
+\[
+\text{hits}(T')
+= \bigl|\{\, i : g_i^p(v_i^p + c^\ast)\in t_i \,\}\bigr|
+\overset{(2)}{=} \bigl|\{\, i : v_i^p + c^\ast \in S_i^p \,\}\bigr|
+= \bigl|\{\, i : c^\ast \in S_i^p - v_i^p \,\}\bigr|
+\overset{(3)}{=} M.
+\]
+
+The middle equality is where exactness (A1) is used, and it is a **pure
+membership equivalence** — it holds verbatim whether $S_i^p$ is an interval, a
+union of two rays, a punctured line, or the empty set. $\blacksquare$
+
+---
+
+\paragraph{Lemma 2 — Zero is feasible}
+
+**Statement.** $M \ge \text{hits}(T)$.
+
+**Proof.** $c = 0$ is a candidate in (3), and
+
+\[
+\bigl|\{\, i : 0 \in S_i^p - v_i^p \,\}\bigr|
+= \bigl|\{\, i : v_i^p \in S_i^p \,\}\bigr|
+\overset{(2)}{=} \bigl|\{\, i : g_i^p(v_i^p)\in t_i \,\}\bigr|
+\overset{(1)}{=} \text{hits}(T).
+\]
+
+Since $M$ is the maximum over all $c$, we get $M \ge \text{hits}(T)$.
+$\blacksquare$
+
+---
+
+\paragraph{Theorem — Monotone chain}
+
+**Statement.** Let $T_0$ be any tree and let
+$T_0 \to T_1 \to \cdots \to T_m$ be a sequence in which each $T_k$ is obtained
+from $T_{k-1}$ by stabbing an additive offset at one node position $p_k$, using
+the exact preimage surrogate computed **against $T_{k-1}$** (A1) and a correct
+stabber (A2). Then
+
+\[ 
+\text{hits}(T_m) \ge \text{hits}(T_{m-1}) \ge \cdots
+\ge \text{hits}(T_1) \ge \text{hits}(T_0).
+\]
+
+
+**Proof.** Fix a step $k$. Apply Lemma 1 with $T=T_{k-1}$, $p=p_k$, $T'=T_k$:
+this gives $\text{hits}(T_k)=M_k$. Apply Lemma 2 with the same data:
+$M_k \ge \text{hits}(T_{k-1})$. Hence $\text{hits}(T_k)\ge\text{hits}(T_{k-1})$.
+Chain over $k=1,\dots,m$. $\blacksquare$
+
+The hypothesis "surrogate computed against $T_{k-1}$" is the Gauss–Seidel
+condition. It is essential: it is what makes $c = 0$ reproduce $T_{k-1}$ exactly
+in Lemma 2. Computing a step's surrogate against a stale version of the tree
+(Jacobi) removes the feasible zero and voids the chain.
+
+
+
 
 \section{Stabbing crossover and mutations}
 

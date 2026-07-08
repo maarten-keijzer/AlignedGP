@@ -45,7 +45,7 @@ function aligned_crossover(root1::Node, root2::Node, inputs, targets, effort::Ef
     tree, _, d = insert_with_alignment(root1, donation, insertion_point, 1, inputs, targets, false)
     
     effort.sum_stabs += 1
-    effort.sum_evals += 3d 
+    effort.sum_evals += 2(d-1) 
     
     tree 
 end
@@ -57,7 +57,7 @@ function aligned_mutation(root::Node, symboltable::SymbolTable, inputs, targets,
     
     effort.sum_evals += length(donation)
     effort.sum_stabs += 1
-    effort.sum_evals += 3d 
+    effort.sum_evals += 2(d-1) 
     
     tree 
 end
@@ -68,7 +68,6 @@ function recursive_aligned_crossover(root1::Node, root2::Node, inputs, targets, 
     tree, _, d = insert_with_alignment(root1, donation, insertion_point, 1, inputs, targets, true)
     
     effort.sum_stabs += d
-    
     tree 
 end
 
@@ -82,3 +81,28 @@ function recursive_aligned_mutation(root::Node, symboltable::SymbolTable, inputs
     
     tree 
 end
+
+function constant_stab_mutation(indy::Tree, inputs, targets, effort, rng)
+
+    root = indy.root
+    nodes = Node[]
+    collect_nodes!(root, nodes)
+    constants = findall(node isa Constant for node in nodes)
+    if isempty(constants)
+        return root 
+    else
+        id = rand(eachindex(constants))
+
+        if indy.slope != 0.0
+            targets = targets .- indy.intercept 
+            targets = targets .* inv(indy.slope)
+        end
+
+        tree, _, d = insert_with_alignment(root, nodes[id], id, 1, inputs, targets, false)
+        effort.sum_evals += d-1 
+        effort.sum_stabs += 1
+
+        return tree
+    end
+end
+

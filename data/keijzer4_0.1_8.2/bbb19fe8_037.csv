@@ -1,0 +1,15 @@
+# method=Stab
+# population_size=5000
+# max_complexity=150
+# cross_mut_prob=0.8
+# max_lexicase_comparisons=100
+# use_l2_scaling=true
+# constant_stab_probability=0.2
+# use_tournament_stratum=false
+# n_targets=101
+time_running,eff,maxhits
+4.844120025634766,3.709888384362723e7,75
+8.520028114318848,4.70993705087402e7,80
+13.826537132263184,5.71006072149281e7,90
+20.091145992279053,6.7102777208634086e7,96
+24.322301149368286,7.710358976710911e7,101

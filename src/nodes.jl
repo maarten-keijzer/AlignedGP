@@ -145,6 +145,18 @@ function insert(recipient::UnaryNode, donation::Node, i::Int, d::Int)
     end
 end
 
+"""
+Collect nodes
+"""
+function collect_nodes!(node::Node, nodes::Vector{Node}) 
+    push!(nodes, node)
+    if node isa BinaryNode 
+        collect_nodes!(node.left, nodes)
+        collect_nodes!(node.right, nodes)
+    elseif node isa UnaryNode 
+        collect_nodes!(node.child, nodes)
+    end
+end
 
 
 """

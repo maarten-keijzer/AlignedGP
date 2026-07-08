@@ -76,6 +76,39 @@ end
     @test (ci + 1.0).hi < 5.0
 end
 
+@testset "scalar multiplication (narrowing)" begin
+    ci = CInterval(2.0, 4.0)
+
+    # positive scalar: bounds scale uniformly
+    @test (ci * 2.0) ≈ CInterval(4.0, 8.0)
+    @test (2.0 * ci) ≈ CInterval(4.0, 8.0)
+
+    # negative scalar: bounds flip
+    @test (ci * -1.0) ≈ CInterval(-4.0, -2.0)
+    @test (-1.0 * ci) ≈ CInterval(-4.0, -2.0)
+
+    # zero: collapses to a zero-width interval; narrow returns invalid_interval (sub-ULP)
+    @test _is_invalid(ci * 0.0)
+
+    # Results are strictly inside (narrowed) for non-degenerate cases
+    @test (ci * 3.0).lo > 6.0
+    @test (ci * 3.0).hi < 12.0
+
+    # interval spanning zero with positive scalar
+    ci2 = CInterval(-2.0, 3.0)
+    @test (ci2 * 2.0) ≈ CInterval(-4.0, 6.0)
+
+    # interval spanning zero with negative scalar (bounds flip)
+    @test (ci2 * -2.0) ≈ CInterval(-6.0, 4.0)
+end
+
+@testset "scalar multiplication preserves invalid sentinel" begin
+    s = invalid_interval
+    @test _is_invalid(s * 2.0)
+    @test _is_invalid(2.0 * s)
+    @test _is_invalid(s * -1.0)
+end
+
 @testset "scalar arithmetic preserves invalid sentinel" begin
     s = invalid_interval
     @test _is_invalid(s + 1.0)
@@ -160,6 +193,22 @@ end
     @test isempty(empty - 5.0)
     @test isempty(5.0 - empty)
     @test isempty(5.0 + empty)
+end
+
+@testset "CIntervals scalar multiplication" begin
+    cis = CIntervals([CInterval(1.0, 2.0), CInterval(4.0, 5.0)])
+
+    scaled = cis * 3.0
+    @test length(scaled) == 2
+    @test scaled ≈ CIntervals([CInterval(3.0, 6.0), CInterval(12.0, 15.0)])
+
+    # negative scalar flips bounds in each sub-interval
+    flipped = cis * -1.0
+    @test flipped ≈ CIntervals([CInterval(-2.0, -1.0), CInterval(-5.0, -4.0)])
+
+    # Empty stays empty
+    empty = CIntervals()
+    @test isempty(empty * 2.0)
 end
 
 @testset "CIntervals broadcastable (scalar in broadcast)" begin

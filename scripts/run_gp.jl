@@ -19,6 +19,7 @@ function plot_best(strata)
     #bar(distr)
 
     ev = evaluate(bestindy, setup.inputs)
+    #ev = bestindy.slope .* ev .+ bestindy.intercept
 
     lo = first.(setup.interval_targets |> flatten)
     hi = last.(setup.interval_targets |> flatten)
@@ -29,18 +30,18 @@ function plot_best(strata)
     pop, bestindy, distr
 end
 
-setup = AlignedGP.keijzer1();
-method = RecursiveStab
+setup = AlignedGP.keijzer4(tol=0.025);
+setup.params.method = RecursiveStab
 strata, effort = initstrata(setup);
 
 begin
     lasttime=time()
     lasteffort = 0; last_processed = 0
     @time for nindies in 1:typemax(Int)
-        iteratestrata!(strata, setup, effort, method=method)
+        iteratestrata!(strata, setup, effort)
         eff = AlignedGP.compute_effort(effort, length(setup.interval_targets))
         
-        if log10(eff) > 8.6
+        if log10(eff) > 9
             break 
         end
 
@@ -56,8 +57,8 @@ begin
     end
 end 
 
-pop, bestindy, distr = plot_best(strata)
-bar(distr)
+pop, bestindy, distr = plot_best(strata);
+bar(distr);
 
 using Statistics
 mean(abs2, setup.ideal_targets .- ev)

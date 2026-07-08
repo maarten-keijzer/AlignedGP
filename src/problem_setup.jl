@@ -2,9 +2,10 @@
     Standard
     Stab
     RecursiveStab
+    ConstantStab
 end
 
-export OptMethod, Standard, Stab, RecursiveStab
+export OptMethod, Standard, Stab, RecursiveStab, ConstantStab
 
 struct SymbolTable
     nvars::Int
@@ -13,11 +14,14 @@ struct SymbolTable
 end
 
 @kwdef mutable struct GPParams 
+    method::OptMethod = RecursiveStab
     cross_mut_prob::Float64 = 0.8
-    max_complexity::Int = 100
+    max_complexity::Int = 150
     population_size::Int = 5_000
-
     max_lexicase_comparisons::Int = 100
+    use_l2_scaling::Bool = true
+    constant_stab_probability = 0.2
+    use_tournament_stratum = false
 end
 
 struct ProblemSetup 
@@ -36,17 +40,16 @@ end
 
 export keijzer1, keijzer4, keijzer4_dup
 
-function keijzer4()
+function keijzer4(;tol=0.01)
     x = collect(0.0:0.1:10.0)
     t = @. x^3 * exp(-x) * cos(x) * sin(x) * (sin(x)^2 * cos(x) - 1)
-    tol = 0.01
 
     ProblemSetup(
         [x],
         t,
         t,
         CIntervals.(CInterval.(t .- tol, t .+ tol)),
-        SymbolTable(1, [identity], [+, *, -, /]),
+        SymbolTable(1, [sin, exp, log, sqrt], [+, *, -, /]),
         GPParams(),
         Random.GLOBAL_RNG
     )

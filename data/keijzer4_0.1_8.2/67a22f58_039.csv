@@ -1,0 +1,15 @@
+# method=Standard
+# population_size=5000
+# max_complexity=150
+# cross_mut_prob=0.8
+# max_lexicase_comparisons=100
+# use_l2_scaling=true
+# constant_stab_probability=0.2
+# use_tournament_stratum=false
+# n_targets=101
+time_running,eff,maxhits
+3.169955015182495,3.7209511e7,74
+5.741460084915161,4.7210228e7,74
+7.654638051986694,5.7211349e7,74
+10.137187004089355,6.721146e7,85
+13.508910894393921,7.7211571e7,101

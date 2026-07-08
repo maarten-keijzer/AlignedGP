@@ -14,10 +14,20 @@ function params_hash(setup)
     string(h, base=16)[1:8]
 end
 
+function next_run_index(dir, experiment_id)
+    existing = filter(readdir(dir)) do f
+        !isnothing(match(Regex("^$(experiment_id)_(\\d+)\\.csv\$"), f))
+    end
+    isempty(existing) && return 1
+    nums = [parse(Int, match(r"_(\d+)\.csv$", f)[1]) for f in existing]
+    maximum(nums) + 1
+end
+
 function run_experiments(setup, dir; nruns, maxeffort, master_seed=42)
     mkpath(dir)
     experiment_id = params_hash(setup)
-    Threads.@threads for i in 1:nruns
+    start_index = next_run_index(dir, experiment_id)
+    Threads.@threads for i in start_index:(start_index + nruns - 1)
         filename = joinpath(dir, "$(experiment_id)_$(lpad(i, 3, '0')).csv")
         run_setup = with_rng(setup, Xoshiro(master_seed + i))
         println("Starting run $filename")
@@ -27,6 +37,10 @@ function run_experiments(setup, dir; nruns, maxeffort, master_seed=42)
             println(io, "# population_size=$(p.population_size)")
             println(io, "# max_complexity=$(p.max_complexity)")
             println(io, "# cross_mut_prob=$(p.cross_mut_prob)")
+            println(io, "# max_lexicase_comparisons=$(p.max_lexicase_comparisons)")
+            println(io, "# use_l2_scaling=$(p.use_l2_scaling)")
+            println(io, "# constant_stab_probability=$(p.constant_stab_probability)")
+            println(io, "# use_tournament_stratum=$(p.use_tournament_stratum)")
             println(io, "# n_targets=$(length(run_setup.ideal_targets))")
             println(io, "time_running,eff,maxhits")
 
@@ -55,10 +69,11 @@ function run_experiments(setup, dir; nruns, maxeffort, master_seed=42)
     end
 end
 
-setup = keijzer4(tol=0.025)
-dir = "data/keijzer4_0.025"
+setup = keijzer4_dup(tol=0.01)
+dir = "data/keijzer4__9"
 
-run_experiments(setup, dir, nruns=10, maxeffort=8.1)
+setup.params.method = RecursiveStab
+run_experiments(setup, dir, nruns=50, maxeffort=9)
 setup.params.method = Standard
-run_experiments(setup, dir, nruns=10, maxeffort=8.1)
+run_experiments(setup, dir, nruns=50, maxeffort=9)
 

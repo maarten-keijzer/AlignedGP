@@ -197,11 +197,6 @@ function _optimize(node::BinaryNode, targets::Vector{CIntervals}, inputs, rng::A
     if parent_hits < left_hits || parent_hits < right_hits
         phits = _hits(updated_evals, targets)
         @show phits, parent_hits, left_hits, right_hits, node.fun
-        # try again?
-        node = BinaryNode(node.fun, new_left, new_right, added_value)
-        result = _optimize(node, targets, inputs, rng)
-        @show result[1].addition.hits
-        #return result
     end
     @assert parent_hits >= right_hits  "[DEBUG-a4f2] T3 < T2: parent=$parent_hits right=$right_hits left=$left_hits, fun=$(node.fun)"
     @assert parent_hits == added_value.hits "$parent_hits != $(added_value.hits)"

@@ -26,18 +26,19 @@ function evaluate_to_tree(node::Node, setup::ProblemSetup)
     targets = setup.interval_targets
 
     output = evaluate(node, inputs)
-    if all(isfinite, output)
-        hits = BitVector(output[i] ∈ targets[i] for i in 1:length(targets))
+    hits = BitVector(output[i] ∈ targets[i] for i in 1:length(targets))
+    
+    if setup.params.use_l2_scaling
         slope, intercept, mse = linear_scale(output, setup.noisy_targets)
-        scaled_out = slope .* output .+ intercept
-        
-        scaled_hits = BitVector(scaled_out[i] ∈ targets[i] for i in eachindex(targets))
-        scaled_hitcount = sum(scaled_hits)
-
-        return Tree(node, scaled_hitcount > sum(hits) ? scaled_hits : hits, slope, intercept, mse, scaled_hitcount)
-    else
-        return Tree(node, BitVector([false for _ in targets]))
+    else 
+        slope, intercept, mse, _ = linear_scale_l1(output, setup.noisy_targets)
     end
+    scaled_out = slope .* output .+ intercept
+    
+    scaled_hits = BitVector(scaled_out[i] ∈ targets[i] for i in eachindex(targets))
+    scaled_hitcount = sum(scaled_hits)
+
+    return Tree(node, scaled_hitcount > sum(hits) ? scaled_hits : hits, slope, intercept, mse, scaled_hitcount)
 end
 
 

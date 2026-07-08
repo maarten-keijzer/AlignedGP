@@ -1,13 +1,18 @@
 using AlignedGP
 
-function dorun(method, setup, seconds)
+function dorun(setup, logeffort)
     strata, effort = initstrata(setup);
 
     starttime=time()
     while(true)
-        hits = iteratestrata!(strata, setup, effort, method=method)
-        if time() - starttime > seconds
-            break;
+        hits = iteratestrata!(strata, setup, effort)
+        # if time() - starttime > seconds
+        #     break;
+        # end
+
+        eff = compute_effort(effort, length(setup.interval_targets))
+        if log10(eff) > logeffort 
+            break
         end
 
         if hits == length(setup.interval_targets)
@@ -18,7 +23,7 @@ function dorun(method, setup, seconds)
     maximum(sum(indy.hits) for stratum in strata for indy in stratum)
 end
 
-function compare_two(method1, method2, setup, seconds, ntries)
+function compare_two(setup1, setup2, effort, ntries)
 
     wins1 = 0
     wins2 = 0 
@@ -30,8 +35,8 @@ function compare_two(method1, method2, setup, seconds, ntries)
     n = 0
 
     for i = 1:ntries
-        task1 = Threads.@spawn dorun(method1, setup, seconds)
-        task2 = Threads.@spawn dorun(method2, setup, seconds)
+        task1 = Threads.@spawn dorun(setup1, effort)
+        task2 = Threads.@spawn dorun(setup2, effort)
         hits1, hits2 = fetch.( (task1, task2) )
         if hits1 > hits2
             wins1 += 1
@@ -50,5 +55,14 @@ function compare_two(method1, method2, setup, seconds, ntries)
 
 end
 
-setup = keijzer4()#([sqrt, exp, log], [+,*,/,-])
-compare_two(RecursiveStab, Standard, setup, 25, 200)
+setup1 = keijzer4(tol=0.025)#([sqrt, exp, log], [+,*,/,-])
+setup2 = deepcopy(setup1)
+
+setup1.params.method = RecursiveStab
+setup1.params.use_tournament_stratum = true
+setup2.params.method = Standard
+setup2.params.use_tournament_stratum = true
+
+compare_two(setup1, setup2, 8.2, 200)
+
+

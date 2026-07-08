@@ -18,7 +18,8 @@ end
 @testset "leftinverse +" begin
     @test leftinverse(+, CI(3.0, 5.0), 2.0)  ≈ CI(1.0, 3.0)
     @test leftinverse(+, CI(3.0, 5.0), -1.0) ≈ CI(4.0, 6.0)
-    @test leftinverse(+, CI(0.0, 0.0), 0.0)  ≈ CI(0.0, 0.0) atol=1e-10
+    # Point interval CI(0,0) - 0.0 = narrow(0,0): no float strictly inside → invalid_interval
+    @test _is_invalid(leftinverse(+, CI(0.0, 0.0), 0.0))
 
     ts = [CI(3.0, 5.0), CI(4.0, 6.0)]
     @test leftinverse(+, ts, [1.0, 2.0]) ≈ [CI(2.0, 4.0), CI(2.0, 4.0)]
@@ -165,7 +166,8 @@ end
     # u < 0: unreachable target → invalid sentinel
     @test _is_invalid(inverse(sqrt, CI(-3.0, -1.0)))
 
-    @test inverse(sqrt, CI(2.0, 2.0)) ≈ CI(4.0, 4.0)
+    # Point interval CI(2,2) → narrow(4,4): no float strictly inside → invalid_interval
+    @test _is_invalid(inverse(sqrt, CI(2.0, 2.0)))
 
     ts = [CI(0.0, 2.0), CI(1.0, 3.0)]
     @test inverse(sqrt, ts) ≈ [CI(0.0, 4.0), CI(1.0, 9.0)] atol=1e-10

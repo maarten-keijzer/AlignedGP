@@ -14,7 +14,7 @@ include("insert_with_alignment.jl")
 include("linear_scaling.jl")
 include("init.jl")
 include("variation.jl")
-include("fitness.jl")
+include("lexicase_algo.jl")
 
 export CInterval, CIntervals, narrow, _is_invalid, invalid_interval, flatten
 export max_overlap_region, select_constant
@@ -23,6 +23,7 @@ export AddedValue, Var, Constant, BinaryNode, UnaryNode, Tree, insert, insert_wi
 export scaled_evaluate, linear_scale, linear_scale_l1
 export SymbolTable,init, initstrata, iteratestrata!, print_report
 export valid_init, initial_fit, optimize
+export ProblemSetup, GPParams
 
 export simple_regression, coordinate_descent
 
