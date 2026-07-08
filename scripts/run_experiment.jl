@@ -42,21 +42,25 @@ function run_experiments(setup, dir; nruns, maxeffort, master_seed=42)
             println(io, "# constant_stab_probability=$(p.constant_stab_probability)")
             println(io, "# use_tournament_stratum=$(p.use_tournament_stratum)")
             println(io, "# n_targets=$(length(run_setup.ideal_targets))")
-            println(io, "time_running,eff,maxhits")
+            println(io, "time_running,eff,maxhits,iterations,best_mse")
 
             strata, effort = initstrata(run_setup)
             start_time = time()
             eff = AlignedGP.compute_effort(effort, length(run_setup.interval_targets))
             last_effort = eff
+            iterations = 0
             while log10(eff) < maxeffort
                 iteratestrata!(strata, run_setup, effort)
+                iterations += 1
                 eff = AlignedGP.compute_effort(effort, length(run_setup.interval_targets))
 
-                if eff - last_effort > 1e7 
+                if eff - last_effort > 1e7
                     maxhits = maximum(sum(indy.hits) for stratum in strata for indy in stratum)
                     time_running = time() - start_time
+                    all_mses = (indy.mse for stratum in strata for indy in stratum if isfinite(indy.mse))
+                    best_mse = isempty(all_mses) ? NaN : minimum(all_mses)
 
-                    println(io, "$time_running,$eff,$maxhits")
+                    println(io, "$time_running,$eff,$maxhits,$iterations,$best_mse")
                     flush(io)
 
                     if maxhits == length(run_setup.ideal_targets)
