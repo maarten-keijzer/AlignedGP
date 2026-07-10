@@ -5,7 +5,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
-\title{Constant Stabbing}
+\title{The Stab: Finding Optimal Constants with Recursive Stabbing}
 \author{Maarten Keijzer}
 \date{July 2026}
 
@@ -14,14 +14,16 @@
 \maketitle
 
 \begin{abstract}
+Semantic inversion of intervals makes it possible to backpropagate the hits loss metric in symbolic regression. The backpropagated intervals are used together with a constant stabbing routine to find optimal constants in a genetic programming system.
 
+Results are mixed so far. Though the average hits with recursive stabbing are quite a bit better than standard GP, success rates are not. That sucks.
 \end{abstract}
 
 \section{Introduction}
 
-\section{Semantic inversion using intervals}
+\section{Semantic inversion using interval arithmetic}
 
-Semantic backpropagating \cite{semantic} use analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure in general; a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error at the root level. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
+Semantic backpropagating \cite{krawiec} use analytical inversion to transform root level targets into surrogate targets that are used in a subsequent search for a good sub-tree for that position. While this preserves the location of the target value, it does not preserve the error structure; a subtree that is a better fit to the surrogate target according to some metric need not lead to a better overall error at the root level. Residual errors will get mapped in non-linear ways, possibly leading to very large errors at the root level. Only when the new sub-tree dominates the original sub-tree on all surrogate targets can a guaranteed improvement be realized. 
 
 Here, instead of using a squared error or related measure for judging different trees, we use interval bands. Target values are bound with one or more interval bands, with each band representing a tolerance for being off-target.  
 
@@ -39,6 +41,8 @@ However, using these surrogate targets for selecting possible sub-trees is not i
 
 Given a node whose output must lie in a target interval $[l, u]$, interval inversion maps that requirement backward through the node's operation to produce a surrogate target for the child subtree. Each of the $n$ data points is handled independently, so the result is a vector of surrogate intervals, one per point.
 
+[Explanation of how this exactly works to follow. Special attention for circular stabbing of periodic functions.]
+
 \section{Stabbing}
 
 Stabbing problems are studied in computational geometry to find the number of areas a ray, line, or general shape intersects with \cite{geometry}. 
@@ -49,7 +53,8 @@ Finding an interval that intersects with the maximum number of intervals from a 
 
 Therefore, given a subtree $T$ producing evaluations $x$ against a surrogate target $[(l_1, u_1), ..., (l_n, u_n)]$, the maximum overlapping interval algorithm gives us a range of values $c \in (l,u)$ for which $x + c$ stabs most intervals, i.e., maximizes hits. 
 
-Given the invariance property of interval inversion on the number of hits, this makes it possible to find optimal additive constants anywhere in the tree. Instead of using unguided or gradient search to iteratively find a good constant, the optimal constant(s) can be found in $O(n log n)$ time. When this routine is used for crossover or mutation, it will ensure that a new subtree will be brought into the right range, stabbing at least one interval. Fully destructive crossovers are no longer possible.
+Given the invariance property of interval inversion on the number of hits, this makes it possible to find optimal additive constants anywhere in the tree. Instead of using unguided or gradient search to iteratively find a good constant, the optimal constant(s) can be found in $O(n log n)$ time. When this routine is used for crossover or mutation, it will ensure that a new subtree will be brought into the right range, stabbing at least one interval. 
+
 
 Finding also the scale instead of just the intercept has complexity $O(n^2)$, and is therefore too expensive to run in the inner loop of a symbolic regression algorithm.
 
@@ -62,7 +67,9 @@ Otherwise, another check is performed to see if there are integers that are opti
 
 Finally, if there is no zero, nor integers in the range, a constant is drawn uniformly from the allowable ranges. 
 
-\section{Monotone-Chain inveriant for sequential offset stabs}
+\section{Monotone-Chain inveriant for recursive stabbing}
+
+[AI-generated drivel -- not sure why this Gauss-Seidel reference is there, but it sure sounds intelligent]
 
 In a symbolic-regression system where subtree constants are found by
 sequential (Gauss–Seidel) offset stabbing against exact per-point surrogate
@@ -118,23 +125,6 @@ c^\ast \in \arg\max_{c\in\mathbb{R}}
 \qquad M := \text{that maximum count.} \tag{3}
 \]
 
----
-
-\subsection{Assumptions}
-
-- **(A1) Exactness.** The surrogate the implementation feeds to the stabber
-  equals $S_i^p$ in (2) — the true preimage of $t_i$ under $g_i^p$.
-- **(A2) Correct stabbing.** The routine returns a point $c^\ast$ attaining the
-  true maximum overlap $M$ of the sets $\{S_i^p - v_i^p\}_i$, and reports that
-  count. Random selection within the argmax region is fine: every point of the
-  argmax region attains $M$ by definition.
-
-These are the **only** assumptions. (A1) is the one division can violate in an
-implementation. Notice that the proof below does not touch it — which is exactly
-why any observed violation is a bug in the surrogate computation, not a gap in
-the theorem.
-
----
 
 \paragraph{Lemma 1 — Stab count equals resulting hits}
 
@@ -151,12 +141,6 @@ outputs $g_i^p(v_i^p + c^\ast)$. Hence
 = \bigl|\{\, i : c^\ast \in S_i^p - v_i^p \,\}\bigr|
 \overset{(3)}{=} M.
 \]
-
-The middle equality is where exactness (A1) is used, and it is a **pure
-membership equivalence** — it holds verbatim whether $S_i^p$ is an interval, a
-union of two rays, a punctured line, or the empty set. $\blacksquare$
-
----
 
 \paragraph{Lemma 2 — Zero is feasible}
 
@@ -201,18 +185,16 @@ in Lemma 2. Computing a step's surrogate against a stale version of the tree
 (Jacobi) removes the feasible zero and voids the chain.
 
 
-
-
 \section{Stabbing crossover and mutations}
 
-Using the machinery of interval inversion and constant stabbing, corresponding crossover and mutation operators are defined using an {\bf aligned-insert} routine. It inserts the tree at a position, adds an optimal constant to put it in range, and repeats this on the path upward, drawing fresh constants along the way. Redrawing constants repositions the surrogate targets for other branches, possibly making the overall problem easier to solve. 
+Using the machinery of interval inversion and constant stabbing, corresponding crossover and mutation operators are defined using an {\bf recursive-stabbing} routine. It inserts the tree at a position, adds an optimal constant to put it in range, and repeats this on the path upward, drawing fresh constants along the way. Redrawing constants repositions the surrogate targets for other branches, possibly making the overall problem easier to solve. 
 
 \subsection{The recursive-stab algorithm}
 
 Every node carries an additive constant $c$, so a node with function $f$ evaluates as $f(\cdot) + c$. The algorithm recurses from the root of $R$ toward position $i$, propagating surrogate targets downward and updated evaluations upward, re-optimising each ancestor's additive constant on the way back. 
 
 \begin{algorithm}
-\caption{$\textsc{AlignedInsert}(N, D, i, \mathbf{x}, \mathcal{T})$}
+\caption{$\textsc{RecursiveStab}(N, D, i, \mathbf{x}, \mathcal{T})$}
 \label{alg:aligned-insert}
 \begin{algorithmic}[1]
 \Require recipient node $N$, donation subtree $D$, index $i$, inputs $\mathbf{x}$,
@@ -227,19 +209,19 @@ Every node carries an additive constant $c$, so a node with function $f$ evaluat
 
 \If{$N$ is a \textbf{UnaryNode} with function $g$}
   \State $\mathcal{T}' \leftarrow g^{-1}(\mathcal{T} - N.c)$ \Comment{interval inverse, pointwise}
-  \State $N'_\mathrm{child},\, \mathbf{v}_\mathrm{child} \leftarrow \textsc{AlignedInsert}(N.\mathrm{child},\, D,\, i-1,\, \mathbf{x},\, \mathcal{T}')$
+  \State $N'_\mathrm{child},\, \mathbf{v}_\mathrm{child} \leftarrow \textsc{RecursiveStab}(N.\mathrm{child},\, D,\, i-1,\, \mathbf{x},\, \mathcal{T}')$
   \State $\mathbf{v} \leftarrow g(\mathbf{v}_\mathrm{child})$
 
 \ElsIf{$N$ is a \textbf{BinaryNode} with function $\oplus$ and $i \le 1 + |N.\mathrm{left}|$}
   \State $\mathbf{v}_R \leftarrow \mathrm{eval}(N.\mathrm{right}, \mathbf{x})$
   \State $\mathcal{T}' \leftarrow \mathrm{leftInverse}(\oplus,\; \mathcal{T} - N.c,\; \mathbf{v}_R)$
-  \State $N'_\mathrm{left},\, \mathbf{v}_L \leftarrow \textsc{AlignedInsert}(N.\mathrm{left},\, D,\, i-1,\, \mathbf{x},\, \mathcal{T}')$
+  \State $N'_\mathrm{left},\, \mathbf{v}_L \leftarrow \textsc{RecursiveStab}(N.\mathrm{left},\, D,\, i-1,\, \mathbf{x},\, \mathcal{T}')$
   \State $\mathbf{v} \leftarrow \mathbf{v}_L \oplus \mathbf{v}_R$
 
 \Else \Comment{insertion is in right subtree}
   \State $\mathbf{v}_L \leftarrow \mathrm{eval}(N.\mathrm{left}, \mathbf{x})$
   \State $\mathcal{T}' \leftarrow \mathrm{rightInverse}(\oplus,\; \mathcal{T} - N.c,\; \mathbf{v}_L)$
-  \State $N'_\mathrm{right},\, \mathbf{v}_R \leftarrow \textsc{AlignedInsert}(N.\mathrm{right},\, D,\, i-1-|N.\mathrm{left}|,\, \mathbf{x},\, \mathcal{T}')$
+  \State $N'_\mathrm{right},\, \mathbf{v}_R \leftarrow \textsc{RecursiveStab}(N.\mathrm{right},\, D,\, i-1-|N.\mathrm{left}|,\, \mathbf{x},\, \mathcal{T}')$
   \State $\mathbf{v} \leftarrow \mathbf{v}_L \oplus \mathbf{v}_R$
 \EndIf
 
@@ -271,7 +253,9 @@ To create an initial population, probabilistic tree creation \cite{luke} is used
 \paragraph{Variation}
 Insert locations are chosen using Koza's 90/10 rule, and subtree crossovers are applied 80\% of the time; otherwise a size fair subtree mutation is used.
 
-With this setup, the only difference between a regular symbolic regression system and the system under study is the aligned-insert routine. 
+After evaluation, the \emph{hits} of the tree are computed. After this, linear scaling is performed and the \emph{hits} are re-evaluated. The maximum is used for the tree's goodness-of-fit. Note that for recursive-stabbing, this operation is superfluous, as the routine ensures that maximum hits are obtained.   
+
+With this setup, the only difference between a regular symbolic regression system and the system under study is the recursive-stabbing routine. 
 
 \subsection{Estimating computational effort}
 
@@ -285,14 +269,25 @@ A useful observation is that under assumptions of optimal caching, only new subt
 
 This gives a clear set of measurements to track. 
 
-A subtree crossover at depth $d$ will add $d n$ to the overall evaluation count, and a subtree mutation inserting an (assumed new and unique) subtree of size $s$ at depth $d$ will add $(d + s) n$ to the overall evaluation count. These mutations are thus more expensive than crossovers. Computational effort is then measured in node-evaluations, or {\bf nods} for short, and effort will be measured in mega-nods (Mnods).
+A subtree crossover at depth $d$ will add $d n$ to the overall evaluation count, and a subtree mutation inserting an (assumed new and unique) subtree of size $s$ at depth $d$ will add $(d + s) n$ to the overall evaluation count. These mutations are thus more expensive than crossovers. Computational effort is then measured in node-evaluations, or {\bf NE} for short, and effort will be measured in millions of these node-evaluations (MNE).
 
 Under this definition of computational effort, an aligned insert, optimizing constants, costs $d n \log n$, with subtree mutation adding and additional $s n$, thus costing $s n + d n \log n$. Finding optimal constants as studied here, costs a factor of $\log n$, and for the method to be considered succesful, it will need to outperform standard methods in a comparable computational budget. 
 
+[Insert some evidence that wall-clock time and node evals are comparable ]
 
 
+\section{Experimental Results}
 
+Better on hits, but needs more time to find 100\% succesful indies.
 
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{experiments_hits.pdf}
+\end{figure}
 
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{experiments_success.pdf}
+\end{figure}
 
 \end{document}

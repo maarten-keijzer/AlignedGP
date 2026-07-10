@@ -73,11 +73,14 @@ function run_experiments(setup, dir; nruns, maxeffort, master_seed=42)
     end
 end
 
-setup = keijzer4_dup(tol=0.01)
-dir = "data/keijzer4__9"
+setup = keijzer4(tol=0.01)
+dir = "data/keijzer4_0.01_10.5"
+effort = 10.5
 
 setup.params.method = RecursiveStab
-run_experiments(setup, dir, nruns=50, maxeffort=9)
+run_experiments(setup, dir, nruns=50, maxeffort=effort)
 setup.params.method = Standard
-run_experiments(setup, dir, nruns=50, maxeffort=9)
+run_experiments(setup, dir, nruns=50, maxeffort=effort)
+setup.params.method = Stab
+run_experiments(setup, dir, nruns=50, maxeffort=effort)
 

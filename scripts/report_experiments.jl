@@ -1,5 +1,5 @@
 using AlignedGP
-using Plots
+using CairoMakie
 
 const METHOD_MAP = Dict(
     "Standard"      => Standard,
@@ -24,7 +24,7 @@ end
 
 function read_run(path)
     comments = Dict{String,String}()
-    rows = Vector{NTuple{3,Float64}}()
+    rows = Vector{NTuple{5,Float64}}()
     for line in eachline(path)
         if startswith(line, "#")
             k, v = split(lstrip(line, '#'), "="; limit=2)
@@ -33,10 +33,13 @@ function read_run(path)
             continue  # header
         else
             parts = split(line, ",")
-            length(parts) == 3 || continue
-            push!(rows, (parse(Float64, parts[1]),
-                         parse(Float64, parts[2]),
-                         parse(Float64, parts[3])))
+            length(parts) < 3 && continue
+            t    = parse(Float64, parts[1])
+            e    = parse(Float64, parts[2])
+            h    = parse(Float64, parts[3])
+            iter = length(parts) >= 4 ? parse(Float64, parts[4]) : NaN
+            mse  = length(parts) >= 5 ? parse(Float64, parts[5]) : NaN
+            push!(rows, (t, e, h, iter, mse))
         end
     end
     comments, rows
@@ -55,9 +58,9 @@ function read_setup(dir)
         comments, rows = read_run(fname)
         isempty(rows) && continue
 
-        data = Matrix{Float64}(undef, length(rows), 3)
-        for (i, (t, e, h)) in enumerate(rows)
-            data[i, :] = [t, e, h]
+        data = Matrix{Float64}(undef, length(rows), 5)
+        for (i, (t, e, h, iter, mse)) in enumerate(rows)
+            data[i, :] = [t, e, h, iter, mse]
         end
 
         if !haskey(experiments, hash_key)
@@ -71,23 +74,28 @@ function read_setup(dir)
     experiments
 end
 
-function avg_hits_by_effort(runs, bin_edges, xcol, y_transform)
+# xcol: column index for x-axis values
+# ycol: column index for y-axis values (3=hits, 5=best_mse)
+# y_agg: how to aggregate multiple y values in a bin (maximum for hits, minimum for mse)
+# y_transform: applied after aggregation (e.g. success rate threshold)
+function avg_by_effort(runs, bin_edges, xcol, ycol, y_agg, y_transform)
     nbins = length(bin_edges) - 1
     avg = zeros(Float64, nbins)
     counts = zeros(Int, nbins)
 
     for data in runs
         effs = data[:, xcol]
-        hits = data[:, 3]
-        last_hits = NaN
+        yvals = data[:, ycol]
+        last_y = NaN
         for b in 1:nbins
             lo, hi = bin_edges[b], bin_edges[b+1]
             mask = (effs .>= lo) .& (effs .< hi)
             if any(mask)
-                last_hits = maximum(hits[mask])
+                finite_vals = filter(isfinite, yvals[mask])
+                isempty(finite_vals) || (last_y = y_agg(finite_vals))
             end
-            isnan(last_hits) && continue  # run hasn't started yet
-            avg[b] += y_transform(last_hits)
+            isnan(last_y) && continue
+            avg[b] += y_transform(last_y)
             counts[b] += 1
         end
     end
@@ -97,10 +105,12 @@ function avg_hits_by_effort(runs, bin_edges, xcol, y_transform)
     bin_centers[valid], avg[valid] ./ counts[valid]
 end
 
-function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort, y_axis=:hits)
-    xcol = x_axis == :time ? 1 : 2
-    xlabel = x_axis == :time ? "Time (s)" : "Effort"
-    ylabel = y_axis == :success_rate ? "Success rate" : "Average max hits"
+function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort, y_axis=:hits,
+                          output="experiments.pdf")
+    xcol = x_axis == :time ? 1 : x_axis == :iterations ? 4 : 2
+    xlabel = x_axis == :time ? "Time (s)" : x_axis == :iterations ? "Individuals processed" : "Effort"
+    ylabel = y_axis == :success_rate ? "Success rate (%)" :
+             y_axis == :best_mse     ? "Best MSE"          : "Average max hits"
 
     all_x = Float64[]
     for exp in values(experiments)
@@ -117,22 +127,47 @@ function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort,
         10 .^ range(log10(x_min), log10(x_max); length=nbins+1) :
         range(x_min, x_max; length=nbins+1)
 
-    plt = plot(
+    fig = Figure(size=(500, 400), fontsize=14)
+    ax = Axis(fig[1, 1];
         xlabel=xlabel, ylabel=ylabel,
-        xscale=log_scale ? :log10 : :identity,
-        legend=:topleft, title="Experiment comparison"
+        xscale=log_scale ? log10 : identity,
+        title="Experiment comparison",
     )
 
     for (hash_key, exp) in experiments
-        y_transform = y_axis == :success_rate ? (h -> h >= exp.n_targets ? 1.0 : 0.0) : identity
+        if y_axis == :success_rate
+            ycol, y_agg = 3, maximum
+            y_transform = h -> h >= exp.n_targets ? 100.0 : 0.0
+        elseif y_axis == :best_mse
+            ycol, y_agg = 5, minimum
+            y_transform = identity
+        else
+            ycol, y_agg = 3, maximum
+            y_transform = identity
+        end
+
         label = "$(exp.params.method)"
-        centers, avgs = avg_hits_by_effort(exp.runs, bin_edges, xcol, y_transform)
+        centers, avgs = avg_by_effort(exp.runs, bin_edges, xcol, ycol, y_agg, y_transform)
         isempty(centers) && continue
-        plot!(plt, centers, avgs; label=label, lw=2)
+        lines!(ax, centers, avgs; label=label, linewidth=2)
     end
 
-    plt
+    if y_axis == :success_rate
+        ylims!(ax, 0, 100)
+    elseif y_axis == :hits
+        max_targets = maximum(exp.n_targets for exp in values(experiments))
+        ylims!(ax, 0, max_targets)
+    end
+
+    axislegend(ax; position=:lt)
+
+    save(output, fig)
+    display(fig)
+    fig
 end
 
-experiments = read_setup("data/keijzer4_dup_9")
-display(plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_rate))
+experiments = read_setup("data/keijzer4_0.01_10.5")
+plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_rate,
+                 output="experiments_success.pdf")
+plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:hits,
+                 output="experiments_hits.pdf")

@@ -63,6 +63,6 @@ setup1.params.use_tournament_stratum = true
 setup2.params.method = Standard
 setup2.params.use_tournament_stratum = true
 
-compare_two(setup1, setup2, 8.2, 200)
+compare_two(setup1, setup2, 8.6, 200)
 
 

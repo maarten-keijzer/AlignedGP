@@ -5,7 +5,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
-\title{Computational Effort}
+\title{Computational Effort revisited}
 \author{Maarten Keijzer}
 \date{July 2026}
 
@@ -16,6 +16,9 @@
 \begin{abstract}
 
 \end{abstract}
+
+
+
 \subsubsection{Alternative, not used}
 Tracking all insertion points and subtree sizes can be intrusive for an implementation, therefore a further, theoretically justified, simplification is used. Under assumptions of uniform selection of insertion points, together with a mutation operator that on average replaces a subtree with the same size as the original, the average depth of insertion as well as the average size of the inserted subtree can be tracked by keeping track of total path length and size of individual trees. As shown in \cite{crossover-bias}, the average depth of a tree is equal to the average size of the tree, and are equal to the total path length divided by the total size of the tree. 
 
