@@ -27,15 +27,18 @@ struct BinaryNode <: Node
     addition::AddedValue
     size::Int
     complexity::Int
+    pathlen_complexity::Int
     function BinaryNode(fun::Function, left::Node, right::Node, addition::AddedValue)
         size = length(left) + length(right) + 1
         cmplx = complexity(left) + complexity(right) + 1 + complexity(addition)
-        new(left, right, fun, addition, size, cmplx)
+        plc = cmplx + pathlen_complexity(left) + pathlen_complexity(right)
+        new(left, right, fun, addition, size, cmplx, plc)
     end
     function BinaryNode(fun::Function, left::Node, right::Node)
         size = length(left) + length(right) + 1
         cmplx = complexity(left) + complexity(right) + 1
-        new(left, right, fun, zeroval, size, cmplx)
+        plc = cmplx + pathlen_complexity(left) + pathlen_complexity(right)
+        new(left, right, fun, zeroval, size, cmplx, plc)
     end
 end
 
@@ -60,11 +63,14 @@ struct UnaryNode <: Node
     addition::AddedValue
     size::Int
     complexity::Int
+    pathlen_complexity::Int
     function UnaryNode(fun::Function, child::Node, addition::AddedValue)
-        new(child, fun, addition, 1 + length(child), 1 + complexity(child) + complexity(addition))
+        cmplx = 1 + complexity(child) + complexity(addition)
+        new(child, fun, addition, 1 + length(child), cmplx, cmplx + pathlen_complexity(child))
     end
     function UnaryNode(fun::Function, child::Node)
-        new(child, fun, zeroval, 1 + length(child), 1 + complexity(child))
+        cmplx = 1 + complexity(child)
+        new(child, fun, zeroval, 1 + length(child), cmplx, cmplx + pathlen_complexity(child))
     end
 end
 
@@ -78,8 +84,8 @@ complexity(u::UnaryNode) = u.complexity
 complexity(v::Var) = 1 + complexity(v.addition)
 complexity(::Constant) = 1
 
-pathlen_complexity(b::BinaryNode) = complexity(b) + pathlen_complexity(b.left) + pathlen_complexity(b.right)
-pathlen_complexity(u::UnaryNode) = complexity(u) + pathlen_complexity(u.child)
+pathlen_complexity(b::BinaryNode) = b.pathlen_complexity
+pathlen_complexity(u::UnaryNode) = u.pathlen_complexity
 pathlen_complexity(v::Var) = complexity(v)
 pathlen_complexity(::Constant) = 1
 
