@@ -139,6 +139,21 @@ end
     @test from_vec == from_tuple
 end
 
+@testset "CIntervals normalizes to disjoint sorted pieces" begin
+    # max_overlap_region flattens all pieces and counts overlaps; it relies on the
+    # pieces within one CIntervals being disjoint (so overlap-count == distinct sources).
+    # The constructor therefore sorts and merges overlapping/touching pieces.
+    @test CIntervals([CInterval(1.0, 5.0), CInterval(3.0, 8.0)]).items == [CInterval(1.0, 8.0)]
+    @test CIntervals([CInterval(1.0, 2.0), CInterval(2.0, 3.0)]).items == [CInterval(1.0, 3.0)]  # touching merges
+    @test CIntervals([CInterval(3.0, 8.0), CInterval(1.0, 5.0)]).items == [CInterval(1.0, 8.0)]  # unsorted input
+    @test CIntervals([CInterval(1.0, 5.0), CInterval(1.0, 5.0)]).items == [CInterval(1.0, 5.0)]  # duplicates
+    # Genuinely disjoint pieces are preserved, including ULP-scale gaps from narrowing.
+    @test CIntervals([CInterval(1.0, 2.0), CInterval(3.0, 4.0)]).items ==
+          [CInterval(1.0, 2.0), CInterval(3.0, 4.0)]
+    two_ray = CIntervals([narrow(-1.0, 0.0), narrow(0.0, 1.0)])
+    @test length(two_ray) == 2
+end
+
 @testset "CIntervals.items returns Vector" begin
     cis = CIntervals([CInterval(1.0, 2.0), CInterval(3.0, 4.0)])
     items = cis.items

@@ -15,9 +15,9 @@ _hits(evals, targets) = [evals[j] ∈ targets[j] for j in eachindex(targets)]
         evals   = [1.0, 2.0, 3.0]
         targets = CIntervals.([CI(5.0, 7.0), CI(6.0, 8.0), CI(7.0, 9.0)])
         av, updated = compute_added_value(evals, targets)
-        # shifted intervals all CI(4,6); zero not in [4,6]; midpoint = 5.0
-        @test av.value ≈ 5.0
-        @test updated ≈ [6.0, 7.0, 8.0]
+        # shifted intervals all CI(4,6); zero not in region → sample within [4, 6]
+        @test 4.0 <= av.value <= 6.0
+        @test updated ≈ evals .+ av.value
         @test _hits(updated, targets) == [true, true, true]
     end
 
@@ -35,8 +35,8 @@ _hits(evals, targets) = [evals[j] ∈ targets[j] for j in eachindex(targets)]
         evals   = [0.0, 5.0, 10.0]
         targets = CIntervals.([CI(1.0, 3.0), CI(6.0, 8.0), CI(20.0, 22.0)])
         av, updated = compute_added_value(evals, targets)
-        # shifted: CI(1,3), CI(1,3), CI(10,12) → depth 2 at CI(1,3), value = 2.0
-        @test av.value ≈ 2.0
+        # shifted: CI(1,3), CI(1,3), CI(10,12) → depth 2 at CI(1,3), sample within [1,3]
+        @test 1.0 <= av.value <= 3.0
         @test _hits(updated, targets) == [true, true, false]
     end
 
@@ -45,8 +45,8 @@ _hits(evals, targets) = [evals[j] ∈ targets[j] for j in eachindex(targets)]
         targets = CIntervals.([CI(2.0, 4.0), CI(5.0, 7.0), CI(4.0, 6.0)])
         av, updated = compute_added_value(evals, targets)
         # point 2: CI(5-Inf, 7-Inf) = CI(-Inf,-Inf) is filtered as invalid sentinel
-        # remaining depth-2 region from points 1 & 3: CI(1,3), value = 2.0
-        @test av.value ≈ 2.0
+        # remaining depth-2 region from points 1 & 3: CI(1,3) → sample within [1,3]
+        @test 1.0 <= av.value <= 3.0
         @test isinf(updated[2])
         @test _hits(updated, targets) == [true, false, true]
     end
@@ -62,7 +62,7 @@ end
     @testset "fresh Var node" begin
         node, new_outputs = align_node(Var(1), targets, inputs)
         @test node isa Var
-        @test node.addition.value ≈ 5.0
+        @test 4.0 <= node.addition.value <= 6.0   # overlap of shifted targets is [4,6]
         @test new_outputs ≈ evaluate(node, inputs)
         @test _hits(new_outputs, targets) == [true, true, true]
     end
@@ -71,7 +71,7 @@ end
         # Var(1) + 10 should produce the same addition as a fresh Var(1), not +15
         node_old = Var(1, AddedValue(10.0))
         node, new_outputs = align_node(node_old, targets, inputs)
-        @test node.addition.value ≈ 5.0
+        @test 4.0 <= node.addition.value <= 6.0   # refit from scratch, not old+shift
         @test node.addition.value ≉ 15.0
         @test new_outputs ≈ evaluate(node, inputs)
         @test _hits(new_outputs, targets) == [true, true, true]
@@ -80,7 +80,7 @@ end
     @testset "donation with large AddedValue is also stripped correctly" begin
         donated = Var(1, AddedValue(100.0))
         node, new_outputs = align_node(donated, targets, inputs)
-        @test node.addition.value ≈ 5.0
+        @test 4.0 <= node.addition.value <= 6.0   # large donated AddedValue is stripped
         @test new_outputs ≈ evaluate(node, inputs)
         @test _hits(new_outputs, targets) == [true, true, true]
     end

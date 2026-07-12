@@ -62,14 +62,30 @@ CIntervals() = CIntervals(CInterval(0.0, 0.0), nothing, 0)
 CIntervals(ci::CInterval) = CIntervals(ci, nothing, 1)
 
 function CIntervals(v::Vector{CInterval})
-    n = length(v)
-    if n > MAX_SUBINTERVALS
-        v = v[1:MAX_SUBINTERVALS]
-        n = MAX_SUBINTERVALS
+    isempty(v) && return CIntervals()
+    length(v) == 1 && return CIntervals(v[1])
+    # Normalize to disjoint, sorted pieces. max_overlap_region flattens all pieces and
+    # counts overlaps; it relies on the pieces WITHIN one CIntervals being disjoint so
+    # that overlap-count == number of distinct data points (== achievable hits). Merging
+    # here is the single chokepoint that guarantees that invariant for every producer.
+    v = sort(v; by = ci -> (ci.lo, ci.hi))
+    merged = CInterval[]
+    lo, hi = v[1].lo, v[1].hi
+    for k in 2:length(v)
+        ci = v[k]
+        if ci.lo <= hi          # overlaps or exactly touches the running piece → merge
+            hi = max(hi, ci.hi)
+        else                    # genuine gap (incl. ULP-scale narrowed branches) → flush
+            push!(merged, CInterval(lo, hi))
+            lo, hi = ci.lo, ci.hi
+        end
     end
-    n == 0 && return CIntervals()
-    n == 1 && return CIntervals(v[1])
-    CIntervals(CInterval(0.0, 0.0), v, n)
+    push!(merged, CInterval(lo, hi))
+    length(merged) == 1 && return CIntervals(merged[1])
+    if length(merged) > MAX_SUBINTERVALS
+        merged = merged[1:MAX_SUBINTERVALS]
+    end
+    CIntervals(CInterval(0.0, 0.0), merged, length(merged))
 end
 
 CIntervals(lo::Float64, hi::Float64) = CIntervals(CInterval(lo, hi))

@@ -88,14 +88,15 @@ end
 _hits(x, t) = sum(x[i] ∈ t[i] for i in eachindex(x))
 
 function compute_added_value(evals, targets::Vector{CIntervals}, rng::AbstractRNG=Random.GLOBAL_RNG)
-    # Use exact (non-narrowing) shift so that point targets [x,x] with eval==x
-    # produce [0,0] (not invalid_interval), preserving exact hits in the depth count.
+    # `targets .- evals` narrows (CInterval - Real → narrow), so a point target [x,x]
+    # with eval==x collapses to invalid_interval and drops out of the depth count; the
+    # exact hit is still recovered below via `unnarrowed_hits` against the raw targets.
     res, depth = max_overlap_region(targets .- evals)
     value = select_constant(res, rng)
     evals = evals .+ value
 
     unnarrowed_hits = _hits(evals, targets)
-    @assert unnarrowed_hits >= depth "$(_hits(evals, targets)), $depth $(maximum(evals)) $(minimum(evals)) $value"
+    @assert unnarrowed_hits >= depth "$(_hits(evals, targets)), $depth $(minimum(evals)) $(maximum(evals)) val=$value intv=$res"
 
     added_value = AddedValue(res, value, unnarrowed_hits)
     

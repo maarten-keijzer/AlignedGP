@@ -60,16 +60,13 @@ end
 
 Pick the concrete additive constant from a max-overlap region, in priority order:
 1. Returns `0` if zero lies in any component.
-2. Picks a component uniformly at random among those containing at least one integer,
-   then returns a uniformly random integer from that component's integer range.
-3. Otherwise samples uniformly over the union of components (interval chosen
-   proportional to width, then a uniform point within it).
-4. Returns `0` if the region is empty.
+2. Samples uniformly over the union of components (interval chosen proportional to
+   width, then a uniform point within it).
+3. Returns `0` if the region is empty.
 """
 function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
     isempty(region.items) && return 0.0
     0.0 in region && return 0.0
-    int_ranges = UnitRange{Int}[]
     finite_bounds = Float64[]    # finite endpoints of half-infinite intervals
     for iv in region.items
         lo, hi = iv.lo, iv.hi
@@ -78,25 +75,13 @@ function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
                 # Very large finite bounds: hi-lo may overflow to Inf.
                 # Record the bound closest to 0 so the !isfinite(total) fallback works.
                 push!(finite_bounds, abs(lo) <= abs(hi) ? lo : hi)
-                continue
             end
-            r = ceil(Int, lo):floor(Int, hi)
-            isempty(r) || push!(int_ranges, r)
         elseif isfinite(hi)      # CI(-Inf, hi): 0 not in region so hi < 0
             push!(finite_bounds, hi)
-            abs(hi) < 9.0e18 || continue
-            n = floor(Int, hi)
-            push!(int_ranges, n:n)
         elseif isfinite(lo)      # CI(lo, Inf): 0 not in region so lo > 0
             push!(finite_bounds, lo)
-            abs(lo) < 9.0e18 || continue
-            n = ceil(Int, lo)
-            push!(int_ranges, n:n)
         end
         # CI(-Inf, Inf): unreachable here — 0 ∈ CI(-Inf,Inf) would have returned above
-    end
-    if !isempty(int_ranges)
-        return Float64(rand(rng, rand(rng, int_ranges)))
     end
     widths = [iv.hi - iv.lo for iv in region.items]
     total  = sum(widths)

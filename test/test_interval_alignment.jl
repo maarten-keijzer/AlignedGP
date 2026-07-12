@@ -95,6 +95,18 @@ cis(lo, hi) = CIntervals(CI(lo, hi))   # convenience: single-interval CIntervals
         @test r.region.items == [CI(2.0, 3.0)]
     end
 
+    @testset "overlapping pieces in one CIntervals do not inflate depth" begin
+        # Regression: a single CIntervals whose pieces overlap must count as ONE source,
+        # not two. The constructor merges overlapping pieces, so depth reflects distinct
+        # data points (== achievable hits). Before the fix the sweep counted both pieces,
+        # reporting a phantom depth that exceeded the hittable count and tripped the
+        # assertion in compute_added_value (observed as hits == depth - 1).
+        overlapping = CIntervals([CI(1.0, 5.0), CI(3.0, 8.0)])   # merges to [1, 8]
+        r = max_overlap_region([overlapping, cis(4.0, 6.0)])
+        @test r.depth == 2                    # one from each of the two sources, not 3
+        @test r.region.items == [CI(4.0, 6.0)]
+    end
+
 end
 
 @testset "select_constant" begin
@@ -109,22 +121,23 @@ end
         @test select_constant(r.region) == 0.0
     end
 
-    @testset "integers in region → result is an integer" begin
-        r = max_overlap_region([cis(1.0, 5.0), cis(3.0, 7.0)])
+    @testset "region without zero → continuous sample within overlap" begin
+        r = max_overlap_region([cis(1.0, 5.0), cis(3.0, 7.0)])  # overlap [3, 5]
         rng = Random.MersenneTwister(42)
         for _ in 1:20
             c = select_constant(r.region, rng)
-            @test c in [3.0, 4.0, 5.0]
+            @test 3.0 <= c <= 5.0
         end
     end
 
-    @testset "two components with integers → sample comes from one of the integer ranges" begin
+    @testset "two components → sample lands in a component, proportional to width" begin
         r = max_overlap_region([cis(1.0, 3.0), cis(1.0, 3.0), cis(5.0, 9.0), cis(5.0, 9.0)])
         rng = Random.MersenneTwister(42)
         results = [select_constant(r.region, rng) for _ in 1:4000]
-        @test all(c -> (1.0 <= c <= 3.0 || 5.0 <= c <= 9.0) && c == floor(c), results)
+        @test all(c -> (1.0 <= c <= 3.0 || 5.0 <= c <= 9.0), results)
         hits_first = count(c -> 1.0 <= c <= 3.0, results)
-        @test 0.40 < hits_first / 4000 < 0.60
+        # widths 2 and 4 → first component chosen ~1/3 of the time
+        @test 0.28 < hits_first / 4000 < 0.40
     end
 
     @testset "no integers in region → continuous sample within region" begin
@@ -172,16 +185,16 @@ end
         end
     end
 
-    @testset "half-infinite region CI(lo, Inf) prefers integer at ceil(lo)" begin
-        region = CIntervals(CI(2.3, Inf))
+    @testset "half-infinite region CI(lo, Inf) → returns finite bound" begin
+        region = CIntervals(CI(2.3, Inf))  # width Inf → fall back to the finite bound
         c = select_constant(region)
-        @test c == 3.0   # ceil(2.3) = 3, smallest integer in CI(2.3, Inf)
+        @test c == 2.3
     end
 
-    @testset "half-infinite region CI(-Inf, hi) prefers integer at floor(hi)" begin
+    @testset "half-infinite region CI(-Inf, hi) → returns finite bound" begin
         region = CIntervals(CI(-Inf, -1.7))
         c = select_constant(region)
-        @test c == -2.0  # floor(-1.7) = -2, largest integer in CI(-Inf, -1.7)
+        @test c == -1.7
     end
 
     @testset "two-ray region from division inverse — result in one of the rays" begin
