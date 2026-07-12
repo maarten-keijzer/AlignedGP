@@ -14,18 +14,101 @@ evaluate(::typeof(/), x, y) = x ./ y
 # leftinverse(op, t, y)  → interval of valid left  args given target t and right arg y
 # rightinverse(op, t, x) → interval of valid right args given target t and left  arg x
 #
-# Scalar arithmetic on CInterval narrows by one ULP (see IntervalSets.jl), so all
-# derived interval propagation is conservatively inner-approximated throughout.
+# The surrogate must be a FORWARD-inner approximation: every u in the returned interval
+# must satisfy `op(·) ∈ t` after floating-point rounding. Narrowing by one ULP in the
+# surrogate's own coordinates is NOT enough — under scale mismatch (e.g. a near-zero
+# multiplicative sibling, or a huge additive sibling) the forward op rounds at a coarser
+# scale than the surrogate, so a "surrogate hit" can miss the target. That breaks the
+# monotone-chain invariant (see specs/invariant_proof.md §2, assumption A1). We therefore
+# round-trip-verify every surrogate against the forward op and drop points we cannot honor.
 
-leftinverse(::typeof(+), t, y)  = t .- y
-rightinverse(::typeof(+), t, x) = t .- x
+# `_guard(a, b, t, fwd)` — narrow [a,b] and keep it only if the forward image of BOTH
+# endpoints lands in `t`. `fwd` is monotone on each candidate piece, so endpoint
+# containment implies the whole (narrowed) interval maps into `t`. Overflow / extreme
+# scaling that pushes an endpoint's image outside `t` yields the invalid sentinel — the
+# point simply does not vote, which is the correct inner-approximation behavior.
+function _guard(a::Float64, b::Float64, t::CInterval, fwd)
+    (isnan(a) || isnan(b)) && return invalid_interval
+    # Cap infinite bounds to the largest finite magnitude (by sign, via clamp). An infinite
+    # child eval forwards to ±Inf or NaN and can never land in a finite target, so it must
+    # not be admitted; the true preimage of a finite target is a set of finite reals, and
+    # floatmax is the most extreme finite child that can occur. Capping (rather than changing
+    # hit-counting) leaves the parent side untouched, and a guarded child hit then provably
+    # forwards into the target. A degenerate [Inf,Inf] preimage (e.g. log of a target above
+    # ~709) clamps to [floatmax,floatmax], which narrow rejects as invalid. clamp also keeps
+    # `fwd` from being evaluated at an infinite argument outside its domain (e.g. log(-Inf)).
+    fm = floatmax(Float64)
+    s = narrow(clamp(min(a, b), -fm, fm), clamp(max(a, b), -fm, fm))
+    _is_invalid(s) && return s
+    (fwd(s.lo) in t && fwd(s.hi) in t) ? s : invalid_interval
+end
 
-leftinverse(::typeof(-), t, y)  = t .+ y
-rightinverse(::typeof(-), t, x) = x .- t   # scalar - interval flips bounds
+# Per-piece guarded preimages for the multiplicative operators. Division of the target
+# bounds by the sibling is used directly (no `inv(x)` reciprocal), avoiding the double
+# rounding and the overflow-to-(-Inf,Inf) that produced phantom hits.
+_mul_pre(t::CInterval, x::Real) =                       # u with x*u ∈ t   (* is commutative)
+    # No iszero(x) special case: with x==0 the bounds become ±Inf and the guard rejects
+    # them because 0*(±Inf) = NaN ∉ t. A near-/exactly-zero sibling therefore certifies no
+    # child value (correct: 0*u is a constant, an additive child stab cannot change it, and
+    # an infinite child eval would forward to NaN). Undercounting here is invariant-safe.
+    _guard(t.lo / x, t.hi / x, t, u -> x * u)
 
-# * and / require sign-aware scaling.
-# Invalid sentinels are preserved explicitly so they survive downstream filtering.
+_divl_pre(t::CInterval, y::Real) =                      # L with L/y ∈ t
+    iszero(y) ? invalid_interval :                      # L/0 = ⊥ ∉ t
+    _guard(t.lo * y, t.hi * y, t, L -> L / y)
 
+_divr_pre(t::CInterval, x::Real) =                      # R with x/R ∈ t  (non-straddling t)
+    iszero(x) ? (0.0 in t ? CInterval(-Inf, Inf) : invalid_interval) :
+    t.lo < 0.0 < t.hi ? invalid_interval :              # two rays; handled at the CIntervals level
+    _guard(x / t.lo, x / t.hi, t, R -> x / R)
+
+# Per-piece left/right inverse of a single target interval, forward-guarded.
+_linv(op, t::CInterval, y::Real) =
+    _is_invalid(t)  ? invalid_interval :
+    op === (+)      ? _guard(t.lo - y, t.hi - y, t, L -> L + y) :
+    op === (-)      ? _guard(t.lo + y, t.hi + y, t, L -> L - y) :
+    op === (*)      ? _mul_pre(t, y)  :
+                      _divl_pre(t, y)                   # op === (/)
+
+_rinv(op, t::CInterval, x::Real) =
+    _is_invalid(t)  ? invalid_interval :
+    op === (+)      ? _guard(t.lo - x, t.hi - x, t, R -> x + R) :
+    op === (-)      ? _guard(x - t.hi, x - t.lo, t, R -> x - R) :
+    op === (*)      ? _mul_pre(t, x)  :
+                      _divr_pre(t, x)                   # op === (/)
+
+# Lift over a multi-piece target. `x/R ∈ t` with a sign-crossing piece splits into two
+# rays, so `/` right-inverse gets its own CIntervals method below.
+_linv(op, t::CIntervals, y::Real) = CIntervals(filter(!_is_invalid, [_linv(op, ci, y) for ci in t]))
+_rinv(op, t::CIntervals, x::Real) = CIntervals(filter(!_is_invalid, [_rinv(op, ci, x) for ci in t]))
+
+function _rinv(::typeof(/), t::CIntervals, x::Real)     # R with x/R ∈ t, ray-aware
+    t.n == 0 && return t
+    iszero(x) && return 0.0 in t ? CIntervals([narrow(-Inf, 0.0), narrow(0.0, Inf)]) : CIntervals()
+    results = CInterval[]
+    for ci in t
+        _is_invalid(ci) && continue
+        if ci.lo < 0.0 < ci.hi
+            # x/R ∈ ci ⟺ R ∈ (-∞, x/lo] ∪ [x/hi, +∞); guard the finite ray endpoints.
+            a, b = x / ci.lo, x / ci.hi
+            lo_end, hi_end = min(a, b), max(a, b)
+            r1 = _guard(-Inf, lo_end, ci, R -> x / R); _is_invalid(r1) || push!(results, r1)
+            r2 = _guard(hi_end, Inf, ci, R -> x / R);  _is_invalid(r2) || push!(results, r2)
+        else
+            r = _divr_pre(ci, x)
+            _is_invalid(r) || push!(results, r)
+        end
+    end
+    CIntervals(results)
+end
+
+# Public API — broadcast the per-piece builders, preserving the previous polymorphism
+# over CInterval, CIntervals, and vectors thereof.
+leftinverse(op, t, y)  = _linv.(op, t, y)
+rightinverse(op, t, x) = _rinv.(op, t, x)
+
+# * and / target-bound scaling helpers. Retained for their invalid-sentinel contract
+# (see test_functions.jl); the inverse path above uses the forward-guarded builders.
 _scale(t::CInterval, s::Real) =
     _is_invalid(t) || iszero(s) ? invalid_interval :
     isinf(s) ? (t.lo <= 0.0 <= t.hi ? CInterval(-Inf, Inf) : invalid_interval) :
@@ -41,12 +124,6 @@ _div_into(x::Real, t::CInterval) =
         (isnan(a) || isnan(b)) ? invalid_interval : narrow(min(a, b), max(a, b))
     end
 
-leftinverse(::typeof(*), t, y)  = _scale.(t, inv.(y))
-rightinverse(::typeof(*), t, x) = _scale.(t, inv.(x))
-
-leftinverse(::typeof(/), t, y)  = _scale.(t, y)
-rightinverse(::typeof(/), t, x) = _div_into.(x, t)
-
 # Unary functions: evaluate(op, x) and inverse(op, t)
 
 evaluate(::typeof(identity), x) = identity.(x)
@@ -56,12 +133,12 @@ inverse(::typeof(identity), t) = inverse.(identity, t)
 
 evaluate(::typeof(sqrt), x) = [v < 0 ? NaN : sqrt(v) for v in x]
 
-# sqrt(x) = z ∈ [l,u]  →  x = z² ∈ [l²,u²] for z≥0.
-# Negative targets are unreachable; return the invalid sentinel CInterval(Inf,Inf).
+# sqrt(x) = z ∈ [l,u]  →  x = z² ∈ [l²,u²] for z≥0. Forward-guarded so an infinite or
+# overflowing preimage bound cannot admit a child eval whose sqrt escapes the target.
 function inverse(::typeof(sqrt), t::CInterval)
     t.hi < 0.0 && return invalid_interval
     l = max(0.0, t.lo)
-    narrow(l^2, t.hi^2)
+    _guard(l^2, t.hi^2, t, sqrt)
 end
 
 inverse(::typeof(sqrt), t) = inverse.(sqrt, t)
@@ -73,15 +150,16 @@ evaluate(::typeof(exp), x) = exp.(x)
 function inverse(::typeof(exp), t::CInterval)
     t.hi <= 0.0 && return invalid_interval
     l_log = t.lo <= 0.0 ? -Inf : log(t.lo)
-    narrow(l_log, log(t.hi))
+    _guard(l_log, log(t.hi), t, exp)
 end
 
 inverse(::typeof(exp), t) = inverse.(exp, t)
 
 evaluate(::typeof(log), x) = [v <= 0 ? NaN : log(v) for v in x]
 
-# log(x) = z ∈ [l,u]  →  x = exp(z) ∈ [exp(l), exp(u)], always valid.
-inverse(::typeof(log), t::CInterval) = narrow(exp(t.lo), exp(t.hi))
+# log(x) = z ∈ [l,u]  →  x = exp(z) ∈ [exp(l), exp(u)], always valid. Forward-guarded so an
+# overflowing exp(u)=Inf bound cannot admit an infinite child eval (log(Inf)=Inf ∉ t).
+inverse(::typeof(log), t::CInterval) = _guard(exp(t.lo), exp(t.hi), t, log)
 
 inverse(::typeof(log), t) = inverse.(log, t)
 

@@ -107,10 +107,12 @@ end
     @test length(r_sc) == 2
     # rays: (-∞, 3/(-1)] ∪ [3/2, ∞) = (-∞, -3] ∪ [1.5, ∞)
     items = sort(r_sc.items, by = ci -> ci.lo)
-    @test isinf(items[1].lo) && items[1].lo < 0
+    # Unbounded ray ends are capped to ±floatmax: the forward-inner surrogate admits only
+    # finite child evals (an infinite eval forwards to 0 or NaN and is handled separately).
+    @test items[1].lo ≈ -floatmax(Float64)
     @test items[1].hi ≈ -3.0
     @test items[2].lo ≈ 1.5
-    @test isinf(items[2].hi) && items[2].hi > 0
+    @test items[2].hi ≈ floatmax(Float64)
 
     # sign-crossing with negative x
     r_sc2 = rightinverse(/, CIntervals(CI(-1.0, 2.0)), -3.0)
@@ -181,12 +183,14 @@ end
 @testset "inverse exp" begin
     @test inverse(exp, CI(1.0, exp(3.0))) ≈ CI(0.0, 3.0) atol=1e-10
 
+    # Unbounded lower preimage is capped to -floatmax (forward-inner surrogate: exp(-floatmax)
+    # underflows to 0, still inside the target; an infinite child eval is excluded).
     r = inverse(exp, CI(-1.0, exp(2.0)))
-    @test first(r) == -Inf
+    @test first(r) ≈ -floatmax(Float64)
     @test last(r) ≈ 2.0
 
     r2 = inverse(exp, CI(0.0, exp(1.0)))
-    @test first(r2) == -Inf
+    @test first(r2) ≈ -floatmax(Float64)
     @test last(r2) ≈ 1.0
 
     @test _is_invalid(inverse(exp, CI(-2.0, -1.0)))
