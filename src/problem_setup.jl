@@ -38,7 +38,7 @@ struct ProblemSetup
     rng::AbstractRNG
 end
 
-export keijzer1, keijzer4, keijzer4_dup
+export keijzer1, keijzer4, keijzer4_dup, load_pmlb
 
 function keijzer4(;tol=0.01)
     x = collect(0.0:0.1:10.0)
@@ -74,6 +74,40 @@ function keijzer4_dup()
     )
 end
 
+
+# Requires JULIA_PYTHONCALL_EXE to point at a Python with pmlb installed,
+# e.g. export JULIA_PYTHONCALL_EXE=/opt/homebrew/bin/python3.11
+function load_pmlb(
+    dataset::AbstractString;
+    unaries=[sqrt, log, exp],
+    binaries=[+, -, *, /],
+    tol::Float64=0.01,
+    rng::AbstractRNG=Random.GLOBAL_RNG
+)
+    pmlb = pyimport("pmlb")
+    df = pmlb.fetch_data(dataset)
+    cols = pyconvert(Vector{String}, df.columns.tolist())
+    data = pyconvert(Matrix{Float64}, df.values)
+
+    target_col = findfirst(==("target"), cols)
+    feature_cols = setdiff(1:length(cols), [target_col])
+
+    targets = data[:, target_col]
+    inputs = [data[:, i] for i in feature_cols]
+
+    params = GPParams()
+    params.max_lexicase_comparisons = min(params.max_lexicase_comparisons, length(targets))
+
+    ProblemSetup(
+        inputs,
+        targets,
+        targets,
+        CIntervals.(CInterval.(targets .- tol, targets .+ tol)),
+        SymbolTable(length(inputs), unaries, binaries),
+        params,
+        rng
+    )
+end
 
 function keijzer1(unaries=[sqrt, log, exp], binaries=[+,-,*,/]; rng::AbstractRNG=Random.GLOBAL_RNG)
     x = sort(rand(rng, 100))

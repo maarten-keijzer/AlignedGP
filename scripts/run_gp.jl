@@ -31,6 +31,10 @@ function plot_best(strata)
 end
 
 setup = AlignedGP.keijzer4(tol=0.025);
+#setup = load_pmlb("1027_ESL", tol=0.5)
+#setup = load_pmlb("706_sleuth_case1202", tol=5.0)
+#setup = load_pmlb("1096_FacultySalaries", tol=0.1)
+
 setup.params.method = RecursiveStab
 strata, effort = initstrata(setup);
 
@@ -41,7 +45,7 @@ begin
         iteratestrata!(strata, setup, effort)
         eff = AlignedGP.compute_effort(effort, length(setup.interval_targets))
         
-        if log10(eff) > 9
+        if log10(eff) > 10
             break 
         end
 

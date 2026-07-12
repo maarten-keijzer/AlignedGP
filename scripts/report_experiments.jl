@@ -171,3 +171,5 @@ plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_r
                  output="experiments_success.pdf")
 plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:hits,
                  output="experiments_hits.pdf")
+plot_experiments(experiments, log_scale=false, x_axis=:iterations, y_axis=:success_rate,
+                 output="experiments_success.pdf")

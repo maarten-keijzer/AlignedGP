@@ -9,3 +9,4 @@ for i in 1:10_000
     tree, _ = optimize(tree, setup.inputs, setup.interval_targets)
 end
 
+
