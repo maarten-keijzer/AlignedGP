@@ -4,6 +4,7 @@ using Random
 using Statistics: median, mean
 using PythonCall
 
+include("Intervals/Intervals.jl")
 include("IntervalSets.jl")
 include("problem_setup.jl")
 include("efforts.jl")

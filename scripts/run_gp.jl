@@ -30,12 +30,14 @@ function plot_best(strata)
     pop, bestindy, distr
 end
 
-setup = AlignedGP.keijzer4(tol=0.025);
+#setup = AlignedGP.keijzer4(tol=0.025);
 #setup = load_pmlb("1027_ESL", tol=0.5)
 #setup = load_pmlb("706_sleuth_case1202", tol=5.0)
-#setup = load_pmlb("1096_FacultySalaries", tol=0.1)
+# setup = load_pmlb("1096_FacultySalaries", tol=0.1, 
+    # unaries=[sqrt])
+setup = load_pmlb("560_bodyfat", tol=0.05)
 
-setup.params.method = RecursiveStab
+setup.params.method = Standard
 strata, effort = initstrata(setup);
 
 begin

@@ -1,5 +1,14 @@
-using AlignedGP
 using Test
+
+@testset "Reverse Functions" begin 
+    include("test_rev_functions.jl")
+end
+
+@testset "Intervals" begin 
+    include("test_Intervals.jl")
+end
+
+using AlignedGP
 
 @testset "IntervalSets" begin
     include("test_interval_sets.jl")
