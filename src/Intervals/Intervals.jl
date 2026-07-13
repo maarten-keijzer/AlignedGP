@@ -4,9 +4,15 @@ using IntervalArithmetic
 export issubset_interval, in_interval, isequal_interval, sup, inf # for testing
 
 # Interface to either Interval or BareInterval
-const IntervalType = Interval{Float64}
-intervaltype(x::Real) = interval(x)
-intervaltype(lo::Real, hi::Real) = interval(lo, hi)
+# const IntervalType = Interval{Float64}
+# intervaltype(x::Real) = interval(x)
+# intervaltype(lo::Real, hi::Real) = interval(lo, hi)
+
+const IntervalType = BareInterval{Float64}
+intervaltype(x::Real) = bareinterval(x)
+intervaltype(lo::Real, hi::Real) = bareinterval(lo, hi)
+Base.:+(iv::IntervalType, x::Real) = iv + bareinterval(x)
+Base.:*(iv::IntervalType, x::Real) = iv * bareinterval(x) 
 
 export IntervalType, intervaltype
 export sqrt_rev, add_rev, mul_rev, inv_rev, sin_rev, exp_rev, log_rev
@@ -35,8 +41,12 @@ function invert(iv::Intervals, rev_fun)
     for i in eachindex(iv)
         for out in rev_fun.(iv[i])
             if !isnothing(out)
-                for o in out
-                    push!(intervals, o)
+                if out isa IntervalType
+                    push!(intervals, out)
+                else
+                    for o in out
+                        push!(intervals, o)
+                    end
                 end
             end
         end

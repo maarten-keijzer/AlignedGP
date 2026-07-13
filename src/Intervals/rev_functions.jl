@@ -43,8 +43,8 @@ end
 function inv_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType, IntervalType}}
     yl, yh = bounds(y)
     if yl < 0 < yh
-        intv1 = inv_rev(interval(yl, 0))
-        intv2 = inv_rev(interval(0, yh))
+        intv1 = inv_rev(intervaltype(yl, 0))
+        intv2 = inv_rev(intervaltype(0, yh))
         isempty_interval(intv1) && return intv2
         isempty_interval(intv2) && return intv1
         return tuple(intv1, intv2)
