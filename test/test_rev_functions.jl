@@ -1,5 +1,5 @@
 # --- Tests -----------------------------------------------------------------
-using AlignedGP.RevIntervals
+using AlignedGP.ReverseIntervals
 using Test 
 
 @testset "sqrt_rev" begin

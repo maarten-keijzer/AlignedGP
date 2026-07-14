@@ -1,8 +1,4 @@
 
-export unsafe 
-unsafe(_) = false 
-unsafe(::typeof(sqrt)) = true 
-unsafe(::typeof(log)) = true
 
 
 # evaluate: real × real → real (broadcasting over vectors)
@@ -10,6 +6,33 @@ evaluate(::typeof(+), x, y) = x .+ y
 evaluate(::typeof(-), x, y) = x .- y
 evaluate(::typeof(*), x, y) = x .* y
 evaluate(::typeof(/), x, y) = x ./ y
+
+# evaluate: real → real , prevent DomainErrors from being thrown
+evaluate(::typeof(sqrt), x) = [v < 0 ? NaN : sqrt(v) for v in x]
+evaluate(::typeof(log), x) = [v <= 0 ? NaN : log(v) for v in x]
+evaluate(::typeof(exp), x) = exp.(x)
+evaluate(::typeof(sin), x) = [isfinite(v) ? sin(v) : NaN for v in x]
+evaluate(::typeof(cos), x) = [isfinite(v) ? cos(v) : NaN for v in x]
+
+
+leftinverse(::typeof(+), t::IntervalType, y::Real) = add_rev(t, y)
+rightinverse(::typeof(+), t::IntervalType, x::Real) = add_rev(t, x)
+
+leftinverse(::typeof(/), t::IntervalType, y::Real) = mul_rev(t, inv(y))
+# t = x / y -- t/x = inv(y) -- x/t = y -- y = x * inv(t)
+function rightinverse(::typeof(/), t::IntervalType, y::Real)
+    invt = inv_rev(t)
+    isnothing(invt) && return nothing 
+    isa(invt, IntervalType) && return mul_rev(invt, y)
+    return mul_rev(first(invt), y), mul_rev(last(invt), y)
+end
+
+
+export unsafe 
+unsafe(_) = false 
+unsafe(::typeof(sqrt)) = true 
+unsafe(::typeof(log)) = true
+
 
 # leftinverse(op, t, y)  → interval of valid left  args given target t and right arg y
 # rightinverse(op, t, x) → interval of valid right args given target t and left  arg x
@@ -126,12 +149,6 @@ _div_into(x::Real, t::CInterval) =
 
 # Unary functions: evaluate(op, x) and inverse(op, t)
 
-evaluate(::typeof(identity), x) = identity.(x)
-
-inverse(::typeof(identity), t::CInterval) = t
-inverse(::typeof(identity), t) = inverse.(identity, t)
-
-evaluate(::typeof(sqrt), x) = [v < 0 ? NaN : sqrt(v) for v in x]
 
 # sqrt(x) = z ∈ [l,u]  →  x = z² ∈ [l²,u²] for z≥0. Forward-guarded so an infinite or
 # overflowing preimage bound cannot admit a child eval whose sqrt escapes the target.
@@ -143,8 +160,6 @@ end
 
 inverse(::typeof(sqrt), t) = inverse.(sqrt, t)
 
-evaluate(::typeof(exp), x) = exp.(x)
-
 # exp(x) = z ∈ [l,u]  →  x = log(z) ∈ [log(l), log(u)] for z>0.
 # exp is always positive, so u≤0 is unreachable. l≤0 imposes no lower bound (→ -Inf).
 function inverse(::typeof(exp), t::CInterval)
@@ -154,8 +169,6 @@ function inverse(::typeof(exp), t::CInterval)
 end
 
 inverse(::typeof(exp), t) = inverse.(exp, t)
-
-evaluate(::typeof(log), x) = [v <= 0 ? NaN : log(v) for v in x]
 
 # log(x) = z ∈ [l,u]  →  x = exp(z) ∈ [exp(l), exp(u)], always valid. Forward-guarded so an
 # overflowing exp(u)=Inf bound cannot admit an infinite child eval (log(Inf)=Inf ∉ t).
@@ -223,8 +236,6 @@ inverse(::typeof(sqrt), cis::CIntervals) = _lift_inverse(sqrt, cis)
 inverse(::typeof(exp),  cis::CIntervals) = _lift_inverse(exp,  cis)
 inverse(::typeof(log),  cis::CIntervals) = _lift_inverse(log,  cis)
 
-evaluate(::typeof(cos), x) = [isfinite(v) ? cos(v) : NaN for v in x]
-evaluate(::typeof(sin), x) = [isfinite(v) ? sin(v) : NaN for v in x]
 
 # cos is periodic with two monotone branches per period in [−π, π]:
 #   decreasing [0,  π]: cos(x) ∈ [lo,hi] ↔ x ∈ [acos(hi), acos(lo)]

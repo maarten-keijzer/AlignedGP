@@ -5,6 +5,9 @@ using Statistics: median, mean
 using PythonCall
 
 include("Intervals/Intervals.jl")
+
+using .ReverseIntervals
+
 include("IntervalSets.jl")
 include("problem_setup.jl")
 include("efforts.jl")

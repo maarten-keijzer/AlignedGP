@@ -1,9 +1,9 @@
-using AlignedGP.RevIntervals
+using AlignedGP.ReverseIntervals
 using Test
 
 @testset "sqrt_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
 
     @test eachindex(iv) == 1:3
     for i in eachindex(iv)
@@ -23,7 +23,7 @@ end;
 
 @testset "inv_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, inv_rev)
     @test length(iv2) == 3
 
@@ -37,7 +37,7 @@ end;
 @testset "simple addition" begin
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
     arg = [0.1, -0.3, 0.5]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, arg, add_rev)
 
     @test length(iv2) == 3
@@ -52,7 +52,7 @@ end
 @testset "Addition with NaN arguments" begin
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
     arg = [Inf, -0.3, NaN]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, arg, add_rev)
 
     @test length(iv2) == 3
@@ -67,7 +67,7 @@ end;
 @testset "simple multiplication" begin
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
     arg = [0.1, -0.3, 0.5]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, arg, mul_rev)
 
     @test length(iv2) == 3
@@ -82,7 +82,7 @@ end;
 @testset "Multiplication with non-finite arguments" begin
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
     arg = [Inf, -0.3, NaN]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, arg, mul_rev)
 
     @test length(iv2) == 3
@@ -96,7 +96,7 @@ end;
 
 @testset "sin_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, sin_rev)
     @test length(iv2) == 3
 
@@ -109,7 +109,7 @@ end;
 
 @testset "exp_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, exp_rev)
     @test length(iv2) == 3
 
@@ -122,7 +122,7 @@ end;
 
 @testset "log_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
-    iv = Intervals(intervals)
+    iv = IntervalVector(intervals)
     iv2 = invert(iv, log_rev)
     @test length(iv2) == 3
 

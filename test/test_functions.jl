@@ -140,21 +140,6 @@ end
     @test !_is_invalid(r._solo)   # result is valid (two rays)
 end
 
-@testset "evaluate identity" begin
-    @test evaluate(identity, 3.0) == 3.0
-    @test evaluate(identity, [1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
-end
-
-@testset "inverse identity" begin
-    @test inverse(identity, CI(1.0, 3.0)) == CI(1.0, 3.0)
-    @test inverse(identity, CI(-Inf, Inf)) == CI(-Inf, Inf)
-    @test isnan(inverse(identity, invalid_interval).lo) # invalid sentinel passes through unchanged
-    @test isnan(inverse(identity, invalid_interval).hi) # invalid sentinel passes through unchanged
-
-    ts = [CI(1.0, 2.0), CI(3.0, 4.0)]
-    @test inverse(identity, ts) == ts
-end
-
 @testset "evaluate sqrt" begin
     @test evaluate(sqrt, 4.0) == [2.0 for a in 0]
     @test evaluate(sqrt, [4.0, 9.0, 16.0]) == [2.0, 3.0, 4.0]

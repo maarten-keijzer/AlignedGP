@@ -24,6 +24,8 @@ function add_rev(z::IntervalType, y::Real) :: Union{Nothing, IntervalType}
     return xl <= xh ? intervaltype(xl, xh) : nothing
 end
 
+umin_rev(z::IntervalType) :: IntervalType = -z 
+
 function mul_rev(z::IntervalType, y::Real) :: Union{Nothing, IntervalType}
     !isfinite(y) && return nothing
 
@@ -112,3 +114,4 @@ function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
 
     return xl <= xh ? intervaltype(xl, xh) : nothing
 end
+
