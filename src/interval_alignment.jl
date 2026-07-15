@@ -1,24 +1,12 @@
 """
     max_overlap_region(intervals) -> (; region, depth)
-
-Sweep `intervals` (a vector of `CIntervals`) to find the maximum depth `k` and
-return every closed range of values contained in exactly `k` of the sub-intervals,
-together with `k`. Each `CIntervals` element may carry multiple disjoint ranges;
-they are all flattened before the sweep.
-
-Empty `CIntervals` elements (the error/invalid state) are silently skipped. If
-all elements are empty or contain only invalid sentinels, returns
-`(; region=CIntervals(), depth=0)`.
 """
-function max_overlap_region(intervals::Vector{CIntervals})
-    flat = flatten(intervals)
-    isempty(flat) && return (; region=CIntervals(), depth=0)
 
-    _is_useless(ci) = !isfinite(ci.lo) && ci.lo == ci.hi
-    valid = filter(ci -> !_is_invalid(ci) && !_is_useless(ci), flat)
-    isempty(valid) && return (; region=CIntervals(), depth=0)
+using IntervalArithmetic: in_interval
 
-    intervals = valid
+function max_overlap_region(intervals::Vector{IntervalType})
+  
+    isempty(intervals) && return (; region=IntervalType[], depth=0)
 
     # Encode: (coordinate, 0) = enter, (coordinate, 1) = leave
     events = Vector{Tuple{Float64,Int}}(undef, 2 * length(intervals))
@@ -31,7 +19,7 @@ function max_overlap_region(intervals::Vector{CIntervals})
     depth     = 0
     max_depth = 0
     seg_start = 0.0
-    components = CInterval[]
+    components = IntervalType[]
 
     for (coord, kind) in events
         if kind == 0        # enter
@@ -45,14 +33,13 @@ function max_overlap_region(intervals::Vector{CIntervals})
             end
         else                # leave
             if depth == max_depth
-                push!(components, CInterval(seg_start, coord))
+                push!(components, intervaltype(seg_start, coord))
             end
             depth -= 1
         end
     end
 
-    region = CIntervals(components)
-    return (; region, depth=max_depth)
+    return (; region=components, depth=max_depth)
 end
 
 """
@@ -63,12 +50,15 @@ Pick the concrete additive constant from a max-overlap region, in priority order
 2. Samples uniformly over the union of components (interval chosen proportional to
    width, then a uniform point within it).
 3. Returns `0` if the region is empty.
+
+TODO: handle half-infinite bounds better, we currently use just the finite bound
+
 """
-function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
-    isempty(region.items) && return 0.0
-    0.0 in region && return 0.0
+function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
+    isempty(region) && return 0.0
+    any(in_interval.(Ref(0.0), region)) && return 0.0
     finite_bounds = Float64[]    # finite endpoints of half-infinite intervals
-    for iv in region.items
+    for iv in region
         lo, hi = iv.lo, iv.hi
         if isfinite(lo) && isfinite(hi)
             if abs(lo) >= 9.0e18 || abs(hi) >= 9.0e18
@@ -83,7 +73,7 @@ function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
         end
         # CI(-Inf, Inf): unreachable here — 0 ∈ CI(-Inf,Inf) would have returned above
     end
-    widths = [iv.hi - iv.lo for iv in region.items]
+    widths = [iv.hi - iv.lo for iv in region]
     total  = sum(widths)
     if !isfinite(total)
         # Half-infinite intervals present and no integers found: return the finite bound
@@ -91,7 +81,7 @@ function select_constant(region::CIntervals, rng::AbstractRNG=Random.GLOBAL_RNG)
     end
     r      = rand(rng) * total
     cumw   = 0.0
-    for (iv, w) in zip(region.items, widths)
+    for (iv, w) in zip(region, widths)
         cumw += w
         if r <= cumw
             return iv.lo + rand(rng) * w

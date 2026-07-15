@@ -1,7 +1,6 @@
 module ReverseIntervals
 
 using IntervalArithmetic
-export issubset_interval, in_interval, isequal_interval, sup, inf # for testing
 
 # Interface to either Interval or BareInterval
 # const IntervalType = Interval{Float64}
@@ -24,8 +23,16 @@ struct IntervalVector
     intervals::Vector{IntervalType}
     offsets::Vector{Int}
 end
-
+IntervalVector() = IntervalVector(IntervalType[], [1])
 IntervalVector(iv::Vector{IntervalType}) = IntervalVector(iv, collect(1:length(iv)+1))
+
+function IntervalVector(tuples::Tuple{T, T}...) where T <: Real 
+    intvec = Vector{IntervalType}(undef, length(tuples))
+    for (i, tup) in enumerate(tuples)
+        intvec[i] = intervaltype(first(tup), last(tup))
+    end
+    IntervalVector(intvec)
+end
 
 caserange(off, i) = off[i]:(off[i+1]-1)      # count = off[i+1]-off[i], 0 when empty
 caseview(iv, off, i) = @view iv[caserange(off, i)]   # no allocation
@@ -69,6 +76,12 @@ function invert(iv::IntervalVector, arg::Vector{<:Real}, rev_fun)
     return IntervalVector(intervals, offsets)
 end
 
-Base.:-(iv::IntervalVector, y::Vector{<:Real}) = invert(iv, -y, add_rev)
+# Re-use add-rev as the inverse of addition is actually the sought for minus function
+Base.:-(iv::IntervalVector, y::Vector{<:Real}) = invert(iv, y, add_rev)
+function Base.:-(intervalvec::IntervalVector, y::Real) 
+    yv = intervaltype(y)
+    intv = [i - yv for i in intervalvec.intervals]
+    IntervalVector(intv, intervalvec.offsets)
+end
 
 end # module Intervals

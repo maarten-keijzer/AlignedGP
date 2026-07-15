@@ -21,12 +21,34 @@ evaluate(tree::Tree, x) = evaluate(tree.root, x)
 scaled_evaluate(tree::Tree, x) = tree.slope .* evaluate(tree.root, x) .+ tree.intercept
 Base.getindex(tree::Tree, i::Int) = getindex(tree.root, i)
 
+function hitvector(ev::Vector{<:Real}, t::IntervalVector)
+    b = Vector{Bool}(undef, length(t))
+    for i in eachindex(t)
+        slice = t[i]
+        b[i] = any(intv -> in_interval(ev[i], intv), slice)
+    end
+    BitVector(b)
+end
+
+function compute_hits(ev::Vector{<:Real}, t::IntervalVector)
+    hits = 0
+    for i in eachindex(t)
+        slice = t[i]
+        for elem in slice 
+            if in_interval(ev[i], elem)
+                hits+=1
+            end
+        end
+    end
+    return hits
+end
+
 function evaluate_to_tree(node::Node, setup::ProblemSetup)
     inputs = setup.inputs
     targets = setup.interval_targets
 
     output = evaluate(node, inputs)
-    hits = BitVector(output[i] ∈ targets[i] for i in 1:length(targets))
+    hits = hitvector(output, targets) #BitVector(output[i] ∈ targets[i] for i in 1:length(targets))
     
     if setup.params.use_l2_scaling
         slope, intercept, mse = linear_scale(output, setup.noisy_targets)

@@ -21,8 +21,8 @@ function plot_best(strata)
     ev = evaluate(bestindy, setup.inputs)
     #ev = bestindy.slope .* ev .+ bestindy.intercept
 
-    lo = first.(setup.interval_targets |> flatten)
-    hi = last.(setup.interval_targets |> flatten)
+    lo = getproperty.(setup.interval_targets.intervals, :lo)
+    hi = getproperty.(setup.interval_targets.intervals, :hi)
     plot(setup.inputs[1], setup.ideal_targets, label="ideal", color=:black)
     plot!(setup.inputs[1], lo, fillrange=hi, fillalpha=0.2, alpha=0, label="interval")
     plt = plot!(setup.inputs[1], ev)
@@ -30,14 +30,15 @@ function plot_best(strata)
     pop, bestindy, distr
 end
 
-#setup = AlignedGP.keijzer4(tol=0.025);
+#setup = keijzer1([sqrt, sin], [+,*,/,-])
+setup = AlignedGP.keijzer4(tol=0.05, unaries=[exp, log, sqrt, sin]);
 #setup = load_pmlb("1027_ESL", tol=0.5)
 #setup = load_pmlb("706_sleuth_case1202", tol=5.0)
 # setup = load_pmlb("1096_FacultySalaries", tol=0.1, 
     # unaries=[sqrt])
-setup = load_pmlb("560_bodyfat", tol=0.05)
+#setup = load_pmlb("560_bodyfat", tol=0.05)
 
-setup.params.method = Standard
+setup.params.method = RecursiveStab
 strata, effort = initstrata(setup);
 
 begin

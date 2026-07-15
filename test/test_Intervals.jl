@@ -1,5 +1,6 @@
 using AlignedGP.ReverseIntervals
 using Test
+using IntervalArithmetic: issubset_interval, in_interval, isequal_interval
 
 @testset "sqrt_rev" begin 
     intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
@@ -132,4 +133,18 @@ end;
         end
     end
 end;
+
+@testset "umin_rev" begin 
+    intervals = [intervaltype(0,1), intervaltype(-4, -1), intervaltype(-0.5, 0.8)]
+    iv = IntervalVector(intervals)
+    iv2 = invert(iv, umin_rev)
+    @test length(iv2) == 3
+
+    for i in eachindex(iv2)
+        for intv in iv2[i]
+            @test issubset_interval(-intv, intervals[i])
+        end
+    end
+end;
+
 

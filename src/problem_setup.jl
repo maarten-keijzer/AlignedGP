@@ -29,7 +29,7 @@ struct ProblemSetup
     
     ideal_targets::Vector{Float64}
     noisy_targets::Vector{Float64}
-    interval_targets::Vector{CIntervals}
+    interval_targets::IntervalVector
 
     symboltable::SymbolTable
 
@@ -40,7 +40,7 @@ end
 
 export keijzer1, keijzer4, keijzer4_dup, load_pmlb
 
-function keijzer4(;tol=0.01)
+function keijzer4(;tol=0.01, unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /])
     x = collect(0.0:0.1:10.0)
     t = @. x^3 * exp(-x) * cos(x) * sin(x) * (sin(x)^2 * cos(x) - 1)
 
@@ -48,8 +48,8 @@ function keijzer4(;tol=0.01)
         [x],
         t,
         t,
-        CIntervals.(CInterval.(t .- tol, t .+ tol)),
-        SymbolTable(1, [sin, exp, log, sqrt], [+, *, -, /]),
+        IntervalVector(intervaltype.(t .- tol, t .+ tol)),
+        SymbolTable(1, unaries, binaries),
         GPParams(),
         Random.GLOBAL_RNG
     )
@@ -60,8 +60,8 @@ function keijzer4_dup()
     t = @. x^3 * exp(-x) * cos(x) * sin(x) * (sin(x)^2 * cos(x) - 1)
     tol1 = 0.01
     tol2 = 0.025
-    int1 = CIntervals.(CInterval.(t .- tol1, t .+ tol1))
-    int2 = CIntervals.(CInterval.(t .- tol2, t .+ tol2))
+    int1 = IntervalVector(intervaltype.(t .- tol1, t .+ tol1))
+    int2 = IntervalVector(intervaltype.(t .- tol2, t .+ tol2))
 
     ProblemSetup(
         [vcat(x,x)],
@@ -102,7 +102,7 @@ function load_pmlb(
         inputs,
         targets,
         targets,
-        CIntervals.(CInterval.(targets .- tol, targets .+ tol)),
+        IntervalVector(intervaltype.(targets .- tol, targets .+ tol)),
         SymbolTable(length(inputs), unaries, binaries),
         params,
         rng
@@ -120,7 +120,7 @@ function keijzer1(unaries=[sqrt, log, exp], binaries=[+,-,*,/]; rng::AbstractRNG
         [x],
         t,
         noisy,
-        CIntervals.(CInterval.(noisy .- tol, noisy .+ tol)),
+        IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
         SymbolTable(1, unaries, binaries),
         GPParams(),
         rng

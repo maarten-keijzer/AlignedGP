@@ -1,6 +1,7 @@
 # --- Tests -----------------------------------------------------------------
 using AlignedGP.ReverseIntervals
 using Test 
+using IntervalArithmetic: issubset_interval, in_interval, sup, inf
 
 @testset "sqrt_rev" begin
     @testset "normal range" begin

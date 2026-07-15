@@ -3,18 +3,18 @@
 using Random
 
 struct AddedValue
-    allowed_intervals::CIntervals
+    allowed_intervals::Vector{IntervalType}
     value::Real
     hits::Int
 
     function AddedValue(v::Real)
         @assert isfinite(v)
-        new(CIntervals(CInterval(v, v)), v, -1)
+        new([], v, -1)
     end
-    AddedValue(allowed_intervals::CIntervals, value::Real) = new(allowed_intervals, value, -1)
-    AddedValue(allowed_intervals::CIntervals, value::Real, hits::Int) = new(allowed_intervals, value, hits)
+    AddedValue(allowed_intervals::Vector{IntervalType}, value::Real) = new(allowed_intervals, value, -1)
+    AddedValue(allowed_intervals::Vector{IntervalType}, value::Real, hits::Int) = new(allowed_intervals, value, hits)
 end
-zeroval = AddedValue(CIntervals(CInterval(0.0, 0.0)), 0.0, -1)
+zeroval = AddedValue(0.0)
 
 complexity(c::AddedValue) = c.value == 0 ? 0 : 1
 

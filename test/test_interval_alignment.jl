@@ -1,128 +1,86 @@
 using Test
 using AlignedGP
+using AlignedGP.ReverseIntervals
 using Random
 
-const CI = CInterval
-cis(lo, hi) = CIntervals(CI(lo, hi))   # convenience: single-interval CIntervals
+using IntervalArithmetic: issubset_interval, in_interval
 
 @testset "max_overlap_region" begin
 
     @testset "empty input" begin
-        r = max_overlap_region(CIntervals[])
+        r = max_overlap_region(IntervalType[])
         @test r.depth == 0
         @test isempty(r.region)
-    end
-
-    @testset "all invalid sentinels" begin
-        r = max_overlap_region([cis(Inf, Inf), cis(Inf, Inf)])
-        @test r.depth == 0
-        @test isempty(r.region)
-    end
-
-    @testset "all empty CIntervals (error state)" begin
-        r = max_overlap_region([CIntervals(), CIntervals()])
-        @test r.depth == 0
-        @test isempty(r.region)
-    end
-
-    @testset "mixed valid and invalid sentinels" begin
-        r = max_overlap_region([cis(1.0, 3.0), cis(Inf, Inf)])
-        @test r.depth == 1
-        @test r.region.items == [CI(1.0, 3.0)]
-    end
-
-    @testset "-Inf sentinel filtered" begin
-        r = max_overlap_region([cis(-Inf, -Inf), cis(1.0, 3.0)])
-        @test r.depth == 1
-        @test r.region.items == [CI(1.0, 3.0)]
     end
 
     @testset "single interval" begin
-        r = max_overlap_region([cis(1.0, 3.0)])
+        r = max_overlap_region([intervaltype(1.0, 3.0)])
         @test r.depth == 1
-        @test r.region.items == [CI(1.0, 3.0)]
+        @test isequal_interval( first(r.region), intervaltype(1.0, 3.0))
     end
 
     @testset "two disjoint intervals" begin
-        r = max_overlap_region([cis(1.0, 2.0), cis(3.0, 4.0)])
+        r = max_overlap_region([intervaltype(1.0, 2.0), intervaltype(3.0, 4.0)])
         @test r.depth == 1
-        @test length(r.region.items) == 2
+        @test length(r.region) == 2
     end
 
     @testset "two fully overlapping intervals" begin
-        r = max_overlap_region([cis(1.0, 5.0), cis(2.0, 4.0)])
+        r = max_overlap_region([intervaltype(1.0, 5.0), intervaltype(2.0, 4.0)])
         @test r.depth == 2
-        @test r.region.items == [CI(2.0, 4.0)]
+        @test length(r.region) == 1
+        @test isequal_interval(first(r.region),  intervaltype(2.0, 4.0))
     end
 
     @testset "touching boundaries count at shared point" begin
-        r = max_overlap_region([cis(1.0, 3.0), cis(3.0, 5.0)])
+        r = max_overlap_region([intervaltype(1.0, 3.0), intervaltype(3.0, 5.0)])
         @test r.depth == 2
-        @test r.region.items == [CI(3.0, 3.0)]
+        @test length(r.region) == 1
+        @test isequal_interval(first(r.region), intervaltype(3.0, 3.0))
     end
 
     @testset "degenerate (point) interval participates" begin
-        r = max_overlap_region([cis(1.0, 5.0), cis(3.0, 3.0)])
+        r = max_overlap_region([intervaltype(1.0, 5.0), intervaltype(3.0, 3.0)])
         @test r.depth == 2
-        @test r.region.items == [CI(3.0, 3.0)]
+        @test length(r.region) == 1
+        @test isequal_interval(first(r.region), intervaltype(3.0, 3.0))
     end
 
     @testset "three staggered intervals — single max region" begin
-        r = max_overlap_region([cis(1.0, 5.0), cis(2.0, 6.0), cis(3.0, 7.0)])
+        r = max_overlap_region([intervaltype(1.0, 5.0), intervaltype(2.0, 6.0), intervaltype(3.0, 7.0)])
         @test r.depth == 3
-        @test r.region.items == [CI(3.0, 5.0)]
+        @test isequal_interval(first(r.region), intervaltype(3.0, 5.0))
     end
 
     @testset "two disjoint max-depth components" begin
-        r = max_overlap_region([cis(1.0, 3.0), cis(1.0, 3.0), cis(5.0, 7.0), cis(5.0, 7.0)])
+        r = max_overlap_region([intervaltype(1.0, 3.0), intervaltype(1.0, 3.0), intervaltype(5.0, 7.0), intervaltype(5.0, 7.0)])
         @test r.depth == 2
-        @test length(r.region.items) == 2
-        @test CI(1.0, 3.0) in r.region.items
-        @test CI(5.0, 7.0) in r.region.items
+        @test length(r.region) == 2
+        @test any(item -> isequal_interval(intervaltype(1.0, 3.0), item), r.region)
+        @test any(item -> isequal_interval(intervaltype(5.0, 7.0), item), r.region)
     end
 
     @testset "all intervals identical" begin
-        r = max_overlap_region([cis(2.0, 4.0), cis(2.0, 4.0), cis(2.0, 4.0)])
+        r = max_overlap_region([intervaltype(2.0, 4.0), intervaltype(2.0, 4.0), intervaltype(2.0, 4.0)])
         @test r.depth == 3
-        @test r.region.items == [CI(2.0, 4.0)]
+        @test any(item -> isequal_interval(intervaltype(2.0, 4.0), item), r.region)
     end
-
-    @testset "CIntervals with multiple sub-intervals" begin
-        # Each data point provides two disjoint target ranges
-        multi = CIntervals([CI(1.0, 3.0), CI(5.0, 7.0)])
-        r = max_overlap_region([multi, cis(2.0, 4.0)])
-        @test r.depth == 2
-        @test r.region.items == [CI(2.0, 3.0)]
-    end
-
-    @testset "overlapping pieces in one CIntervals do not inflate depth" begin
-        # Regression: a single CIntervals whose pieces overlap must count as ONE source,
-        # not two. The constructor merges overlapping pieces, so depth reflects distinct
-        # data points (== achievable hits). Before the fix the sweep counted both pieces,
-        # reporting a phantom depth that exceeded the hittable count and tripped the
-        # assertion in compute_added_value (observed as hits == depth - 1).
-        overlapping = CIntervals([CI(1.0, 5.0), CI(3.0, 8.0)])   # merges to [1, 8]
-        r = max_overlap_region([overlapping, cis(4.0, 6.0)])
-        @test r.depth == 2                    # one from each of the two sources, not 3
-        @test r.region.items == [CI(4.0, 6.0)]
-    end
-
-end
+end;
 
 @testset "select_constant" begin
 
     @testset "empty region returns zero" begin
-        r = max_overlap_region(CIntervals[])
+        r = max_overlap_region(IntervalType[])
         @test select_constant(r.region) == 0.0
     end
 
     @testset "zero in region → returns 0" begin
-        r = max_overlap_region([cis(-1.0, 2.0), cis(-2.0, 1.0)])
+        r = max_overlap_region([intervaltype(-1.0, 2.0), intervaltype(-2.0, 1.0)])
         @test select_constant(r.region) == 0.0
     end
 
     @testset "region without zero → continuous sample within overlap" begin
-        r = max_overlap_region([cis(1.0, 5.0), cis(3.0, 7.0)])  # overlap [3, 5]
+        r = max_overlap_region([intervaltype(1.0, 5.0), intervaltype(3.0, 7.0)])  # overlap [3, 5]
         rng = Random.MersenneTwister(42)
         for _ in 1:20
             c = select_constant(r.region, rng)
@@ -131,7 +89,7 @@ end
     end
 
     @testset "two components → sample lands in a component, proportional to width" begin
-        r = max_overlap_region([cis(1.0, 3.0), cis(1.0, 3.0), cis(5.0, 9.0), cis(5.0, 9.0)])
+        r = max_overlap_region([intervaltype(1.0, 3.0), intervaltype(1.0, 3.0), intervaltype(5.0, 9.0), intervaltype(5.0, 9.0)])
         rng = Random.MersenneTwister(42)
         results = [select_constant(r.region, rng) for _ in 1:4000]
         @test all(c -> (1.0 <= c <= 3.0 || 5.0 <= c <= 9.0), results)
@@ -141,7 +99,7 @@ end
     end
 
     @testset "no integers in region → continuous sample within region" begin
-        r = max_overlap_region([cis(1.2, 1.8), cis(1.2, 1.8)])
+        r = max_overlap_region([intervaltype(1.2, 1.8), intervaltype(1.2, 1.8)])
         rng = Random.MersenneTwister(42)
         for _ in 1:20
             c = select_constant(r.region, rng)
@@ -150,7 +108,7 @@ end
     end
 
     @testset "wider component sampled more often (continuous path)" begin
-        region = CIntervals([CI(0.1, 0.2), CI(0.4, 0.9)])
+        region = [intervaltype(0.1, 0.2), intervaltype(0.4, 0.9)]
         rng = Random.MersenneTwister(42)
         hits_wide = count(1:10000) do _
             c = select_constant(region, rng)
@@ -160,7 +118,7 @@ end
     end
 
     @testset "zero at boundary counts as in region" begin
-        r = max_overlap_region([cis(-1.0, 0.0), cis(0.0, 1.0)])
+        r = max_overlap_region([intervaltype(-1.0, 0.0), intervaltype(0.0, 1.0)])
         @test select_constant(r.region) == 0.0
     end
 
@@ -168,42 +126,42 @@ end
     # Before the fix, total=Inf caused a silent fallback to 0.0 regardless of region.
 
     @testset "half-infinite region CI(lo, Inf) — result must be in region" begin
-        region = CIntervals(CI(2.0, Inf))  # does not contain 0
+        region = [intervaltype(2.0, Inf)]  # does not contain 0
         rng = Random.MersenneTwister(42)
         for _ in 1:20
             c = select_constant(region, rng)
-            @test c in region      # was: c == 0.0 which is NOT in CI(2, Inf)
+            @test in_interval(c, region[1])      # was: c == 0.0 which is NOT in CI(2, Inf)
         end
     end
 
     @testset "half-infinite region CI(-Inf, hi) — result must be in region" begin
-        region = CIntervals(CI(-Inf, -3.0))  # does not contain 0
+        region = [intervaltype(-Inf, -3.0)]  # does not contain 0
         rng = Random.MersenneTwister(42)
         for _ in 1:20
             c = select_constant(region, rng)
-            @test c in region      # was: c == 0.0 which is NOT in CI(-Inf, -3)
+            @test in_interval(c, region[1])      # was: c == 0.0 which is NOT in CI(-Inf, -3)
         end
     end
 
     @testset "half-infinite region CI(lo, Inf) → returns finite bound" begin
-        region = CIntervals(CI(2.3, Inf))  # width Inf → fall back to the finite bound
+        region = [intervaltype(2.3, Inf)]  # width Inf → fall back to the finite bound
         c = select_constant(region)
         @test c == 2.3
     end
 
     @testset "half-infinite region CI(-Inf, hi) → returns finite bound" begin
-        region = CIntervals(CI(-Inf, -1.7))
+        region = [intervaltype(-Inf, -1.7)]
         c = select_constant(region)
         @test c == -1.7
     end
 
     @testset "two-ray region from division inverse — result in one of the rays" begin
         # _div_into produces (-∞, a] ∪ [b, +∞) when target straddles zero
-        region = CIntervals([CI(-Inf, -2.0), CI(3.0, Inf)])
+        region = [intervaltype(-Inf, -2.0), intervaltype(3.0, Inf)]
         rng = Random.MersenneTwister(42)
         for _ in 1:50
             c = select_constant(region, rng)
-            @test c in region    # was: c == 0.0, outside both rays
+            @test any(item -> in_interval(c, item), region)
         end
     end
 
@@ -212,11 +170,11 @@ end
         # Their widths each approach prevfloat(Inf), so sum(widths) overflows to Inf.
         # Before the fix: finite_bounds stayed empty → rand(rng, []) crashed.
         big = prevfloat(Inf)
-        region = CIntervals([CI(1.0e19, big), CI(2.0e19, big)])
+        region = [intervaltype(1.0e19, big), intervaltype(2.0e19, big)]
         rng = Random.MersenneTwister(42)
         for _ in 1:10
             c = select_constant(region, rng)
-            @test c in region
+            @test any(in_interval.(Ref(c), region))
         end
     end
 

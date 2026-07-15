@@ -1,14 +1,16 @@
 # --- Reverse (preimage) functions ------------------------------------------
 
+maybeinterval(lo, hi) = (lo != Inf && lo <= hi) ? intervaltype(lo, hi) : nothing
+
 function sqrt_rev(y::IntervalType) :: Union{Nothing, IntervalType}
     yl, yh = bounds(y)
     yh < 0.0 && return nothing
     yh == 0.0 && return intervaltype(0)
 
-    xl = yl < 0 ? 0.0 : nextfloat(yl * yl)
+    xl = yl <= 0 ? 0.0 : nextfloat(yl * yl)
     xh = prevfloat(yh * yh)
 
-    return xl <= xh ? intervaltype(xl, xh) : nothing
+    return maybeinterval(xl, xh)
 end
 
 function add_rev(z::IntervalType, y::Real) :: Union{Nothing, IntervalType}
@@ -21,7 +23,7 @@ function add_rev(z::IntervalType, y::Real) :: Union{Nothing, IntervalType}
     # image outside z; exact shifts keep their (tight) endpoints.
     isfinite(xl) && inf(interval(xl) + y) < zl && (xl = nextfloat(xl))
     isfinite(xh) && sup(interval(xh) + y) > zh && (xh = prevfloat(xh))
-    return xl <= xh ? intervaltype(xl, xh) : nothing
+    return maybeinterval(xl, xh)
 end
 
 umin_rev(z::IntervalType) :: IntervalType = -z 
@@ -39,7 +41,7 @@ function mul_rev(z::IntervalType, y::Real) :: Union{Nothing, IntervalType}
 
     xl = nextfloat(xl)
     xh = prevfloat(xh)
-    return xl <= xh ? intervaltype(xl, xh) : nothing
+    return maybeinterval(xl, xh)
 end
 
 function inv_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType, IntervalType}}
@@ -47,8 +49,8 @@ function inv_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{Interval
     if yl < 0 < yh
         intv1 = inv_rev(intervaltype(yl, 0))
         intv2 = inv_rev(intervaltype(0, yh))
-        isempty_interval(intv1) && return intv2
-        isempty_interval(intv2) && return intv1
+        isnothing(intv1) && return intv2
+        isnothing(intv2) && return intv1
         return tuple(intv1, intv2)
     elseif yl == yh == 0
         return nothing
@@ -57,7 +59,7 @@ function inv_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{Interval
         xl, xh = minmax(inv(yl), inv_yh)
         xl = nextfloat(xl)
         xh = prevfloat(xh)
-        return xl <= xh ? intervaltype(xl, xh) : nothing
+        return maybeinterval(xl, xh)
     end
 end
 
@@ -100,10 +102,10 @@ function exp_rev(y::IntervalType) :: Union{Nothing, IntervalType}
     yl, yh = bounds(y)
     yh <= 0.0 && return nothing
 
-    xl = yl <= 0 ? -Inf : nextfloat(log(yl))
+    xl = yl <= 0 ? nextfloat(-Inf) : nextfloat(log(yl))
     xh = prevfloat(log(yh))
 
-    return xl <= xh ? intervaltype(xl, xh) : nothing
+     return maybeinterval(xl, xh)
 end
 
 function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
@@ -112,6 +114,7 @@ function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
     xl = nextfloat(exp(yl))
     xh = prevfloat(exp(yh))
 
-    return xl <= xh ? intervaltype(xl, xh) : nothing
+    xl == xh && isinf(xl) && return nothing
+    return maybeinterval(xl, xh)
 end
 

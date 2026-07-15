@@ -10,9 +10,6 @@ end
 
 using AlignedGP
 
-@testset "IntervalSets" begin
-    include("test_interval_sets.jl")
-end
 @testset "Interval Alignment" begin
     include("test_interval_alignment.jl")
 end
@@ -33,7 +30,4 @@ end
 end
 @testset "Linear Scaling" begin
     include("test_linear_scaling.jl")
-end
-@testset "Circular Stab" begin
-    include("test_circular_stab.jl")
 end

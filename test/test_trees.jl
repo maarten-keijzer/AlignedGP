@@ -1,9 +1,8 @@
 using AlignedGP
+using AlignedGP.ReverseIntervals
 using Test
 
 import AlignedGP: evaluate
-
-const CI = CInterval
 
 @testset "AddedValue" begin
     av = AddedValue(3.0)
@@ -13,7 +12,7 @@ const CI = CInterval
     av_zero = AddedValue(0.0)
     @test complexity(av_zero) == 0
 
-    region = CIntervals(CI(1.0, 2.0))
+    region = [intervaltype(1.0, 2.0)]
     av2 = AddedValue(region, 1.5)
     @test av2.value == 1.5
     @test av2.allowed_intervals == region
@@ -29,11 +28,11 @@ end
     @test length(v_added) == 1
     @test complexity(v_added) == 2
 
-    c = Constant(5.0)
+    c = Constant()
     @test length(c) == 1
     @test complexity(c) == 1
 
-    c_zero = Constant()
+    c_zero = Constant(0.0)
     @test length(c_zero) == 1
     @test complexity(c_zero) == 1  # zero constant still counts — it IS the value
 
