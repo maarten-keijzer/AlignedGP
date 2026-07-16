@@ -1,7 +1,7 @@
 # --- Reverse (preimage) functions ------------------------------------------
 
 isperiodic(::Any) = false
-#isperiodic(::typeof(sin)) = true
+isperiodic(::typeof(sin)) = true
 
 function maybeinterval(lo, hi) 
     (lo != Inf && hi != -Inf && lo <= hi) ? intervaltype(lo, hi) : nothing

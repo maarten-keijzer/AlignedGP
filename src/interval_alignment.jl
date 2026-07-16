@@ -99,66 +99,63 @@ function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.G
     return draw_constant(rng, s, region)
 end
  
-const SEAM_TOL = 1e-12
+const TWO_PI = 2π
 
-function max_overlap_region_circular(arcs::Vector{IntervalType}, C::Float64 = 2π)
+"""
+    fold_stab(arcs, C=2π) -> (; region, depth)
 
-    isempty(arcs) && return (; region=IntervalType[], depth=0)
+Circular stab for the additive constant directly below `sin` (Situation 1 of
+`specs/sine-inversion.md`). The constant is only defined mod `C`, so every arc is
+reduced mod `C` and emitted **twice** — once where it lands, once translated by `-C`.
+The duplicate lets the plain linear `max_overlap_region` find a region that wraps past
+0 as one unbroken interval (§3.3). Full arcs (`w >= C`, i.e. the case is hit for every
+constant) are counted separately in `nfull` rather than materialised, since both copies
+of a `≥C` arc would cover the same point.
 
-    # Encode: (coordinate, 0) = enter, (coordinate, 1) = leave.
-    # A wrapping arc splits at the seam: tail [lo, C] plus head [0, hi-C].
-    events = Vector{Tuple{Float64,Int}}()
-    sizehint!(events, 2 * length(arcs) + 2)
+Same `(; region, depth)` contract as `max_overlap_region`, with `nfull` folded into
+`depth`. Widths are taken **before** reduction and carried; endpoints are never reduced
+separately (that would split an arc across the seam).
+"""
+function fold_stab(arcs::Vector{IntervalType}, C::Float64 = TWO_PI)
+    out   = IntervalType[]
+    nfull = 0
     for iv in arcs
-        lo, hi = bounds(iv)
-        if hi <= C
-            push!(events, (lo, 0));  push!(events, (hi, 1))
+        lo, hi = inf(iv), sup(iv)
+        w = hi - lo
+        if w >= C
+            nfull += 1                       # every constant works for this case
         else
-            push!(events, (lo, 0));  push!(events, (C, 1))         # tail
-            push!(events, (0.0, 0)); push!(events, (hi - C, 1))    # head
+            s = mod(lo, C)
+            push!(out, intervaltype(s, s + w))
+            push!(out, intervaltype(s - C, s - C + w))
         end
     end
-    sort!(events)
-
-    depth     = 0
-    max_depth = 0
-    seg_start = 0.0
-    components = IntervalType[]
-
-    for (coord, kind) in events        # ← identical to the linear version
-        if kind == 0        # enter
-            depth += 1
-            if depth > max_depth
-                max_depth = depth
-                empty!(components)
-                seg_start = coord
-            elseif depth == max_depth
-                seg_start = coord
-            end
-        else                # leave
-            if depth == max_depth
-                push!(components, intervaltype(seg_start, coord))
-            end
-            depth -= 1
-        end
-    end
-
-    return (; region=merge_seam(components, C), depth=max_depth)
+    res = max_overlap_region(out)
+    return (; region = res.region, depth = res.depth + nfull)
 end
 
-# A component straddling the seam leaves the sweep as two pieces —
-# one starting at 0, one ending at C. Physically they are one arc.
-function merge_seam(components::Vector{IntervalType}, C::Float64)
-    length(components) < 2 && return components
-    i0 = findfirst(c -> inf(c) <= SEAM_TOL,     components)
-    iC = findfirst(c -> sup(c) >= C - SEAM_TOL, components)
-    (i0 === nothing || iC === nothing || i0 == iC) && return components
+"""
+    circular_hits(evals, targets, C=2π) -> Int
 
-    merged = IntervalType[intervaltype(inf(components[iC]), C + sup(components[i0]))]
-    for (k, c) in enumerate(components)
-        (k == i0 || k == iC) && continue
-        push!(merged, c)
+Count, for the chosen constant already folded into `evals`, how many cases are hit
+**mod `C`**: case `i` hits when some arc of `targets[i]` covers `evals[i]` up to a
+multiple of `C`. This is the truthful hit count for a constant directly below `sin`
+(a hit against any `+kC` translate of the canonical arc is a genuine forward hit,
+because `sin` is `C`-periodic); the linear `compute_hits` would miss translated hits.
+"""
+function circular_hits(evals::Vector{<:Real}, targets::IntervalVector, C::Float64 = TWO_PI)
+    hits = 0
+    for i in eachindex(targets)
+        v = evals[i]
+        for arc in targets[i]
+            lo, hi = inf(arc), sup(arc)
+            w = hi - lo
+            if w >= C || mod(v - lo, C) <= w
+                hits += 1
+                break
+            end
+        end
     end
-    merged
+    return hits
 end
 

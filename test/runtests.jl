@@ -13,6 +13,9 @@ using AlignedGP
 @testset "Interval Alignment" begin
     include("test_interval_alignment.jl")
 end
+@testset "Circular Stab" begin
+    include("test_circular_stab.jl")
+end
 @testset "Functions" begin
     include("test_functions.jl")
 end
