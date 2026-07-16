@@ -102,55 +102,103 @@ end
 const TWO_PI = 2π
 
 """
-    fold_stab(arcs, C=2π) -> (; region, depth)
+    fold_stab(carcs::IntervalVector, C=2π) -> (; region, depth)
+    fold_stab(arcs::Vector{IntervalType}, C=2π)          # each arc its own case
 
 Circular stab for the additive constant directly below `sin` (Situation 1 of
 `specs/sine-inversion.md`). The constant is only defined mod `C`, so every arc is
-reduced mod `C` and emitted **twice** — once where it lands, once translated by `-C`.
-The duplicate lets the plain linear `max_overlap_region` find a region that wraps past
-0 as one unbroken interval (§3.3). Full arcs (`w >= C`, i.e. the case is hit for every
-constant) are counted separately in `nfull` rather than materialised, since both copies
-of a `≥C` arc would cover the same point.
+reduced mod `C` and emitted **twice** — once where it lands, once translated by `-C` —
+so a region wrapping past 0 is found whole (§3.3). Full arcs (`w >= C`, i.e. the case
+is hit for every constant) are counted in `nfull` rather than materialised.
 
-Same `(; region, depth)` contract as `max_overlap_region`, with `nfull` folded into
-`depth`. Widths are taken **before** reduction and carried; endpoints are never reduced
-separately (that would split an arc across the seam).
+Depth counts **distinct cases**, not arcs: a sweep bumps depth only when a case's arc
+count goes 0→1 and drops it 1→0. A case can legitimately contribute several arcs (rising
++ falling, or several arcs after a composed inversion) that may even *touch* mod `C`
+after inner-rounding; counting cases rather than arcs keeps `depth == hits` without
+relying on the per-case disjointness invariant (§1 / open-question #4) holding exactly.
+
+Same `(; region, depth)` contract as `max_overlap_region`, with `nfull` folded in.
 """
-function fold_stab(arcs::Vector{IntervalType}, C::Float64 = TWO_PI)
-    out   = IntervalType[]
-    nfull = 0
-    for iv in arcs
-        lo, hi = inf(iv), sup(iv)
-        w = hi - lo
-        if w >= C
-            nfull += 1                       # every constant works for this case
-        else
-            s = mod(lo, C)
-            push!(out, intervaltype(s, s + w))
-            push!(out, intervaltype(s - C, s - C + w))
+fold_stab(arcs::Vector{IntervalType}, C::Float64 = TWO_PI) = fold_stab(IntervalVector(arcs), C)
+
+function fold_stab(carcs::IntervalVector, C::Float64 = TWO_PI)
+    # (coord, kind, case): kind 0 = enter, 1 = leave. Each non-full arc is emitted at
+    # s and s-C, both tagged with the owning case so same-case overlap counts once.
+    events = Tuple{Float64,Int,Int}[]
+    nfull  = 0
+    for i in eachindex(carcs)
+        casefull = false
+        for arc in carcs[i]
+            w = sup(arc) - inf(arc)
+            if w >= C
+                casefull = true
+                break
+            end
+            s = mod(inf(arc), C)
+            push!(events, (s, 0, i));     push!(events, (s + w, 1, i))
+            push!(events, (s - C, 0, i)); push!(events, (s - C + w, 1, i))
+        end
+        casefull && (nfull += 1)
+    end
+    isempty(events) && return (; region = IntervalType[], depth = nfull)
+
+    sort!(events)                          # coord asc; enter(0) before leave(1) at ties
+
+    active     = zeros(Int, length(carcs)) # open-arc count per case
+    depth      = 0                         # number of distinct active cases
+    max_depth  = 0
+    seg_start  = 0.0
+    components = IntervalType[]
+    for (coord, kind, case) in events
+        if kind == 0                       # enter
+            if active[case] == 0           # case becomes active
+                depth += 1
+                if depth > max_depth
+                    max_depth = depth
+                    empty!(components); seg_start = coord
+                elseif depth == max_depth
+                    seg_start = coord
+                end
+            end
+            active[case] += 1
+        else                               # leave
+            if active[case] == 1           # case becomes inactive
+                depth == max_depth && push!(components, intervaltype(seg_start, coord))
+                depth -= 1
+            end
+            active[case] -= 1
         end
     end
-    res = max_overlap_region(out)
-    return (; region = res.region, depth = res.depth + nfull)
+    return (; region = components, depth = max_depth + nfull)
 end
 
 """
-    circular_hits(evals, targets, C=2π) -> Int
+    circular_hits(carcs, value, C=2π) -> Int
 
-Count, for the chosen constant already folded into `evals`, how many cases are hit
-**mod `C`**: case `i` hits when some arc of `targets[i]` covers `evals[i]` up to a
-multiple of `C`. This is the truthful hit count for a constant directly below `sin`
-(a hit against any `+kC` translate of the canonical arc is a genuine forward hit,
-because `sin` is `C`-periodic); the linear `compute_hits` would miss translated hits.
+Count how many cases the constant `value` hits, given the **c-space arcs** `carcs`
+(the same `(targets - evals)` arcs `fold_stab` folds). Case `i` hits when one of its
+arcs — reduced mod `C` and emitted at `s` and `s-C` exactly as in `fold_stab` — covers
+`value`, with **at most one hit per case** (the disjointness invariant of §1).
+
+Using `fold_stab`'s own arcs and endpoint arithmetic (rather than recomputing from the
+u-space `targets` and subtracting `evals`, which rounds differently) keeps this an
+independent recount of *disjointness* without drifting from the fold's depth by a ULP at
+a boundary. A hit against any `+kC` translate of the canonical arc is a genuine forward
+hit because `sin` is `C`-periodic, so this is the truthful hit count for the constant
+directly below `sin`; the linear `compute_hits` would miss translated hits.
 """
-function circular_hits(evals::Vector{<:Real}, targets::IntervalVector, C::Float64 = TWO_PI)
+function circular_hits(carcs::IntervalVector, value::Real, C::Float64 = TWO_PI)
     hits = 0
-    for i in eachindex(targets)
-        v = evals[i]
-        for arc in targets[i]
+    for i in eachindex(carcs)
+        for arc in carcs[i]
             lo, hi = inf(arc), sup(arc)
             w = hi - lo
-            if w >= C || mod(v - lo, C) <= w
+            if w >= C
+                hits += 1
+                break
+            end
+            s = mod(lo, C)
+            if (s <= value <= s + w) || (s - C <= value <= s - C + w)
                 hits += 1
                 break
             end

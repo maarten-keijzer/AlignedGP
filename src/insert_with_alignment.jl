@@ -83,11 +83,12 @@ canonicalize_circular(c::Real, C::Real = 2π) = mod(c + C / 2, C) - C / 2  # int
 
 function compute_added_value(evals, targets::IntervalVector, rng::AbstractRNG=Random.GLOBAL_RNG; circular::Bool = false)
     if circular
-        res, depth = fold_stab((targets - evals).intervals)
+        carcs = targets - evals                    # c-space arcs, per case
+        res, depth = fold_stab(carcs)
         value = select_constant(res, rng)
-        value = value == 0.0 ? value : canonicalize_circular(value)  # keep the 0 short-circuit exact
+        hits  = circular_hits(carcs, value)         # independent recount (validates per-case disjointness)
+        value = value == 0.0 ? value : canonicalize_circular(value)  # store canonical; hits mod-C invariant
         evals = evals .+ value
-        hits  = circular_hits(evals, targets)
     else
         res, depth = max_overlap_region((targets - evals).intervals)
         value = select_constant(res, rng)

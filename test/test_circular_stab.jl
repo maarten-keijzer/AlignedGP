@@ -56,6 +56,34 @@ sinrev_targets(band, n) = invert(IntervalVector(fill(band, n)), sin_rev)
     end
 end
 
+@testset "fold_stab per-case disjointness (IntervalVector)" begin
+
+    @testset "two touching arcs in one case count once" begin
+        # A single case whose two arcs meet at ≈0 — as arises when a sin node sits
+        # below deeper structure and sin_rev maps several incoming arcs, two of which
+        # touch after inner-rounding. Pooling would count the shared point twice;
+        # the case must contribute depth 1 (disjointness invariant, §1 / open-Q #4).
+        carcs = IntervalVector([intervaltype(-0.02, 0.0), intervaltype(0.0, 0.03)], [1, 3])
+        r = AlignedGP.fold_stab(carcs)
+        @test r.depth == 1
+    end
+
+    @testset "genuinely disjoint arcs in one case still count once" begin
+        # rising + falling of one sin_rev case: disjoint mod 2π, so at any c at most
+        # one covers ⇒ the case contributes 1, never 2.
+        carcs = IntervalVector([intervaltype(0.1, 0.4), intervaltype(2.7, 3.0)], [1, 3])
+        r = AlignedGP.fold_stab(carcs)
+        @test r.depth == 1
+    end
+
+    @testset "two different cases agreeing still stack" begin
+        # case 1 = {[0.0,0.2]}, case 2 = {[0.1,0.3]} overlap at [0.1,0.2] ⇒ depth 2.
+        carcs = IntervalVector([intervaltype(0.0, 0.2), intervaltype(0.1, 0.3)], [1, 2, 3])
+        r = AlignedGP.fold_stab(carcs)
+        @test r.depth == 2
+    end
+end
+
 # ---------------------------------------------------------------------------
 # circular_hits — truthful hit count mod 2π, must agree with fold depth
 # ---------------------------------------------------------------------------
@@ -64,14 +92,16 @@ end
     @testset "agrees with fold_stab depth at the chosen constant" begin
         evals   = [π/2, π/2 + C, 0.0]                 # spread over periods
         targets = sinrev_targets(intervaltype(0.9, 1.0), 3)
-        _, depth = AlignedGP.fold_stab((targets - evals).intervals)
-        @test AlignedGP.circular_hits(evals, targets) == depth
+        carcs   = targets - evals
+        res, depth = AlignedGP.fold_stab(carcs.intervals)
+        value = select_constant(res)
+        @test AlignedGP.circular_hits(carcs, value) == depth
     end
 
     @testset "full-circle arc always hits" begin
         # target ⊇ [-1,1] ⇒ sin_rev returns the full circle ⇒ every point hits
-        targets = sinrev_targets(intervaltype(-2.0, 2.0), 2)
-        @test AlignedGP.circular_hits([123.4, -987.6], targets) == 2
+        carcs = sinrev_targets(intervaltype(-2.0, 2.0), 2) - [123.4, -987.6]
+        @test AlignedGP.circular_hits(carcs, 0.37) == 2
     end
 end
 
