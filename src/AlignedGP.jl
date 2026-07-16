@@ -29,6 +29,7 @@ export SymbolTable,init, initstrata, iteratestrata!, print_report
 export valid_init, initial_fit, optimize
 export ProblemSetup, GPParams
 
+export sin_rev_circular
 export coordinate_descent
 
 end # module AlignedGP

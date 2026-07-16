@@ -2,10 +2,10 @@
 insert with alignment: insert a node into a tree at index i, and update the alignment of the recipient node to include the allowed intervals of the donation node.
 It will also update the added values of all nodes upward
 """
-function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing)
+function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; stabber = max_overlap_region)
 
     if i == 1
-        return align_node(donation, targets, inputs)..., d # find best additive constant
+        return align_node(donation, targets, inputs; stabber=stabber)..., d # find best additive constant
     elseif i <= 1 + length(recipient.left)
         # Evaluate right child -- keep
         right_evals = evaluate(recipient.right, inputs)
@@ -20,7 +20,7 @@ function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d:
 
         # compute an added value for the new node that aligns with the target (new_evals gets updated with that constant value)
         if recursive_stabbing
-            added_value, updated_evals = compute_added_value(new_evals, targets)
+            added_value, updated_evals = compute_added_value(new_evals, targets, stabber=stabber)
         else
             added_value = recipient.addition
             updated_evals = new_evals .+ recipient.addition.value
@@ -51,17 +51,17 @@ function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d:
     end
 end
 
-function insert_with_alignment(recipient::UnaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing)
+function insert_with_alignment(recipient::UnaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; stabber=max_overlap_region)
 
     if i == 1
-        return align_node(donation, targets, inputs)..., d
+        return align_node(donation, targets, inputs; stabber=stabber)..., d
     else
         new_targets = inverse(recipient.fun, targets - recipient.addition.value)
         #new_targets = inverse(recipient.fun, targets)
 
-        new_child, child_evals, d = insert_with_alignment(recipient.child, donation, i - 1, d+1, inputs, new_targets, recursive_stabbing)
-
-
+        child_stabber = isperiodic(recipient.fun) ? max_overlap_region_circular : max_overlap_region
+        new_child, child_evals, d = insert_with_alignment(recipient.child, donation, i - 1, d+1, inputs, new_targets, recursive_stabbing, stabber=child_stabber)
+        
         new_evals = evaluate(recipient.fun, child_evals)
 
         if recursive_stabbing
@@ -74,12 +74,12 @@ function insert_with_alignment(recipient::UnaryNode, donation::Node, i::Int, d::
     end
 end
 
-function insert_with_alignment(::Union{Var, Constant}, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, _)
-    return align_node(donation, targets, inputs)..., d
+function insert_with_alignment(::Union{Var, Constant}, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; stabber=max_overlap_region)
+    return align_node(donation, targets, inputs, stabber=stabber)..., d
 end
 
-function compute_added_value(evals, targets::IntervalVector, rng::AbstractRNG=Random.GLOBAL_RNG)
-    res, depth = max_overlap_region( (targets - evals).intervals)
+function compute_added_value(evals, targets::IntervalVector, rng::AbstractRNG=Random.GLOBAL_RNG; stabber = max_overlap_region)
+    res, depth = stabber( (targets - evals).intervals)
     value = select_constant(res, rng)
     evals = evals .+ value
 
@@ -164,12 +164,12 @@ function optimize(root::Node, inputs, targets::IntervalVector, rng::AbstractRNG=
     _optimize(root, targets, inputs, rng)
 end
 
-function align_node(node::Node, targets::IntervalVector, inputs)
+function align_node(node::Node, targets::IntervalVector, inputs; stabber=max_overlap_region)
 
     # Evaluate node without its added value
     out = evaluate(node, inputs) .- node.addition.value
     # Find an added value that optimizes hit count
-    added_value, new_outputs = compute_added_value(out, targets)
+    added_value, new_outputs = compute_added_value(out, targets, stabber=stabber)
 
     if node isa Var
         node = Var(node.index, added_value)

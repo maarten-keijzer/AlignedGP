@@ -15,7 +15,7 @@ Base.:*(iv::IntervalType, x::Real) = iv * bareinterval(x)
 
 export IntervalType, intervaltype
 export sqrt_rev, add_rev, mul_rev, inv_rev, sin_rev, exp_rev, log_rev, umin_rev
-export IntervalVector, invert
+export IntervalVector, invert, isperiodic
 
 include("rev_functions.jl")
 

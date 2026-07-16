@@ -35,7 +35,7 @@ function read_run(path)
             parts = split(line, ",")
             length(parts) < 3 && continue
             t    = parse(Float64, parts[1])
-            e    = parse(Float64, parts[2])
+            e    = parse(Float64, parts[2]) / 1_000_000 #Mnods
             h    = parse(Float64, parts[3])
             iter = length(parts) >= 4 ? parse(Float64, parts[4]) : NaN
             mse  = length(parts) >= 5 ? parse(Float64, parts[5]) : NaN
@@ -108,7 +108,7 @@ end
 function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort, y_axis=:hits,
                           output="experiments.pdf")
     xcol = x_axis == :time ? 1 : x_axis == :iterations ? 4 : 2
-    xlabel = x_axis == :time ? "Time (s)" : x_axis == :iterations ? "Individuals processed" : "Effort"
+    xlabel = x_axis == :time ? "Time (s)" : x_axis == :iterations ? "Individuals processed" : "Effort (M nods)"
     ylabel = y_axis == :success_rate ? "Success rate (%)" :
              y_axis == :best_mse     ? "Best MSE"          : "Average max hits"
 
@@ -146,7 +146,7 @@ function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort,
             y_transform = identity
         end
 
-        label = "$(exp.params.method)"
+        label = exp.params.method == Stab ? "SingleStab" : "$(exp.params.method)"
         centers, avgs = avg_by_effort(exp.runs, bin_edges, xcol, ycol, y_agg, y_transform)
         isempty(centers) && continue
         lines!(ax, centers, avgs; label=label, linewidth=2)
@@ -159,17 +159,28 @@ function plot_experiments(experiments; nbins=50, log_scale=true, x_axis=:effort,
         ylims!(ax, 0, max_targets)
     end
 
-    axislegend(ax; position=:lt)
+    axislegend(ax; position=:rb)
 
     save(output, fig)
     display(fig)
     fig
 end
 
-experiments = read_setup("data/keijzer4_0.01_10.5")
+experiments = read_setup("data/keijzer4_0.025_9.5")
+delete!(experiments, "fbf651e8")
+delete!(experiments, "5005c278")
+experiments2 = read_setup("data/keijzer4_noncircular_0.025_9.5")
+experiments2["c4751128"].params.method = Stab
+experiments["bla"] = experiments2["c4751128"]
+
 plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_rate,
-                 output="experiments_success.pdf")
+                 output="doc/figs/experiments_success.pdf")
+
+experiments = read_setup("data/keijzer4_circular_0.025_9.5")
+plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_rate,
+                 output="doc/figs/experiments_success.pdf")
+
 plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:hits,
-                 output="experiments_hits.pdf")
-plot_experiments(experiments, log_scale=false, x_axis=:iterations, y_axis=:success_rate,
-                 output="experiments_success.pdf")
+                 output="doc/figs/experiments_hits.pdf")
+plot_experiments(experiments, log_scale=false, x_axis=:time, y_axis=:success_rate,
+                 output="doc/figs/experiments_success_time.pdf")

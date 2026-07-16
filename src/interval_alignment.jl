@@ -54,7 +54,7 @@ Pick the concrete additive constant from a max-overlap region, in priority order
 TODO: handle half-infinite bounds better, we currently use just the finite bound
 
 """
-function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
+function select_constantorg(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
     isempty(region) && return 0.0
     any(in_interval.(Ref(0.0), region)) && return 0.0
     finite_bounds = Float64[]    # finite endpoints of half-infinite intervals
@@ -90,3 +90,74 @@ function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.G
     iv = last(region.items)
     return iv.lo + rand(rng) * (iv.hi - iv.lo)
 end
+
+include("constant_sampler.jl")
+function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
+    isempty(region) && return 0.0
+    s = ConstantSampler()
+    return draw_constant(rng, s, region)
+end
+ 
+const SEAM_TOL = 1e-12
+
+function max_overlap_region_circular(arcs::Vector{IntervalType}, C::Float64 = 2π)
+
+    isempty(arcs) && return (; region=IntervalType[], depth=0)
+
+    # Encode: (coordinate, 0) = enter, (coordinate, 1) = leave.
+    # A wrapping arc splits at the seam: tail [lo, C] plus head [0, hi-C].
+    events = Vector{Tuple{Float64,Int}}()
+    sizehint!(events, 2 * length(arcs) + 2)
+    for iv in arcs
+        lo, hi = bounds(iv)
+        if hi <= C
+            push!(events, (lo, 0));  push!(events, (hi, 1))
+        else
+            push!(events, (lo, 0));  push!(events, (C, 1))         # tail
+            push!(events, (0.0, 0)); push!(events, (hi - C, 1))    # head
+        end
+    end
+    sort!(events)
+
+    depth     = 0
+    max_depth = 0
+    seg_start = 0.0
+    components = IntervalType[]
+
+    for (coord, kind) in events        # ← identical to the linear version
+        if kind == 0        # enter
+            depth += 1
+            if depth > max_depth
+                max_depth = depth
+                empty!(components)
+                seg_start = coord
+            elseif depth == max_depth
+                seg_start = coord
+            end
+        else                # leave
+            if depth == max_depth
+                push!(components, intervaltype(seg_start, coord))
+            end
+            depth -= 1
+        end
+    end
+
+    return (; region=merge_seam(components, C), depth=max_depth)
+end
+
+# A component straddling the seam leaves the sweep as two pieces —
+# one starting at 0, one ending at C. Physically they are one arc.
+function merge_seam(components::Vector{IntervalType}, C::Float64)
+    length(components) < 2 && return components
+    i0 = findfirst(c -> inf(c) <= SEAM_TOL,     components)
+    iC = findfirst(c -> sup(c) >= C - SEAM_TOL, components)
+    (i0 === nothing || iC === nothing || i0 == iC) && return components
+
+    merged = IntervalType[intervaltype(inf(components[iC]), C + sup(components[i0]))]
+    for (k, c) in enumerate(components)
+        (k == i0 || k == iC) && continue
+        push!(merged, c)
+    end
+    merged
+end
+

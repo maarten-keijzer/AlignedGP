@@ -91,15 +91,15 @@ tol=0.025
 effort = 9.5
 nruns = 20
 setup = keijzer4(tol=tol)
-dir = "data/keijzer4_$(tol)_$(effort)"
+dir = "data/keijzer4_noncircular_$(tol)_$(effort)"
 
 futures = []
 setup.params.method = RecursiveStab
 add_experiments!(futures, setup, dir, nruns=nruns, maxeffort=effort)
-setup.params.method = Standard
-add_experiments!(futures, setup, dir, nruns=nruns, maxeffort=effort)
-setup.params.method = Stab
-add_experiments!(futures, setup, dir, nruns=nruns, maxeffort=effort)
+# setup.params.method = Standard
+# add_experiments!(futures, setup, dir, nruns=nruns, maxeffort=effort)
+# setup.params.method = Stab
+# add_experiments!(futures, setup, dir, nruns=nruns, maxeffort=effort)
 
 # wait until everything is done
 [wait(future) for future in futures]

@@ -1,7 +1,7 @@
 # --- Tests -----------------------------------------------------------------
 using AlignedGP.ReverseIntervals
 using Test 
-using IntervalArithmetic: issubset_interval, in_interval, sup, inf
+using IntervalArithmetic: issubset_interval, in_interval, sup, inf, bounds
 
 @testset "sqrt_rev" begin
     @testset "normal range" begin
@@ -174,7 +174,7 @@ end;
     end
 end;
 
-@testset "sin_rev" begin
+#@testset "sin_rev" begin
     # Normalise the Union{Nothing,Interval,Tuple} return into a vector of arcs.
     arcs(r) = r === nothing ? IntervalType[] : (r isa Tuple ? collect(r) : [r])
 
@@ -243,6 +243,24 @@ end;
         @test issubset_interval(sin(a), intervaltype(-1.0, -0.5))
         @test issubset_interval(sin(b), intervaltype(-1.0, -0.5))
     end;
+
+    @testset "trough covered merges through the seam (one arc)" begin
+        y = intervaltype(-1.5, -0.5)          # trough included, peak not
+        x = sin_rev_circular(y)
+        @test x isa IntervalType               # merged, not split
+        lo, hi = bounds(x)
+        @test lo ≈ 7π/6  atol=1e-9             # π − asin(−0.5)
+        @test hi ≈ 11π/6 atol=1e-9             # 2π + asin(−0.5)
+        @test lo <= hi
+        # soundness: the arc maps back inside the clamped target
+        @test issubset_interval(sin(x), intervaltype(-1.0, -0.5 + 1e-12))
+    end
+
+    @testset "trough arc is not double-covered at 3π/2" begin
+        x = sin_rev_circular(intervaltype(-1.5, -0.5))
+        @test x isa IntervalType
+        @test in_interval(3π/2, x)             # trough is interior, covered once
+    end
 
     @testset "Large ranges" begin
         y = intervaltype(nextfloat(-Inf), nextfloat(nextfloat(-Inf)))

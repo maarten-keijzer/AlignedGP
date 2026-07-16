@@ -1,6 +1,11 @@
 # --- Reverse (preimage) functions ------------------------------------------
 
-maybeinterval(lo, hi) = (lo != Inf && lo <= hi) ? intervaltype(lo, hi) : nothing
+isperiodic(::Any) = false
+#isperiodic(::typeof(sin)) = true
+
+function maybeinterval(lo, hi) 
+    (lo != Inf && hi != -Inf && lo <= hi) ? intervaltype(lo, hi) : nothing
+end
 
 function sqrt_rev(y::IntervalType) :: Union{Nothing, IntervalType}
     yl, yh = bounds(y)
@@ -63,6 +68,26 @@ function inv_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{Interval
     end
 end
 
+function exp_rev(y::IntervalType) :: Union{Nothing, IntervalType}
+    yl, yh = bounds(y)
+    yh <= 0.0 && return nothing
+
+    xl = yl <= 0 ? nextfloat(-Inf) : nextfloat(log(yl))
+    xh = prevfloat(log(yh))
+
+     return maybeinterval(xl, xh)
+end
+
+function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
+    yl, yh = bounds(y)
+
+    xl = nextfloat(exp(yl))
+    xh = prevfloat(exp(yh))
+
+    xl == xh && isinf(xl) && return nothing
+    return maybeinterval(xl, xh)
+end
+
 function sin_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType, IntervalType}}
     yl, yh = bounds(y)
 
@@ -98,23 +123,43 @@ function sin_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{Interval
     end
 end
 
-function exp_rev(y::IntervalType) :: Union{Nothing, IntervalType}
+const TWOPI = intervaltype(2) * intervaltype(π)
+const FULL_CIRCLE = intervaltype(0.0, sup(TWOPI))
+
+function sin_rev_circular(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType,IntervalType}}
     yl, yh = bounds(y)
-    yh <= 0.0 && return nothing
+    cl, ch = max(yl, -1.0), min(yh, 1.0)
+    cl > ch && return nothing
 
-    xl = yl <= 0 ? nextfloat(-Inf) : nextfloat(log(yl))
-    xh = prevfloat(log(yh))
+    peak, trough = yh >= 1.0, yl <= -1.0
+    peak && trough && return FULL_CIRCLE
 
-     return maybeinterval(xl, xh)
+    PI = intervaltype(π)
+
+    if peak                                          # merged around π/2
+        A = asin(intervaltype(cl))
+        lo, hi = sup(A), inf(PI - A)
+        return lo <= hi ? intervaltype(lo, hi) : nothing
+
+    elseif trough                                    # merged around 3π/2, wraps
+        B = asin(intervaltype(ch))
+        lo, hi = sup(PI - B), inf(TWOPI + B)
+        return lo <= hi ? intervaltype(lo, hi) : nothing
+
+    else
+        A, B = asin(intervaltype(cl)), asin(intervaltype(ch))
+        rlo, rhi = sup(A), inf(B)                    # rising  ⊆ [−π/2, π/2]
+        flo, fhi = sup(PI - B), inf(PI - A)          # falling ⊆ [π/2, 3π/2]
+        rising, falling = rlo <= rhi, flo <= fhi
+
+        if rising && falling
+            return (intervaltype(rlo, rhi), intervaltype(flo, fhi))
+        elseif rising
+            return intervaltype(rlo, rhi)
+        elseif falling
+            return intervaltype(flo, fhi)
+        else
+            return nothing
+        end
+    end
 end
-
-function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
-    yl, yh = bounds(y)
-
-    xl = nextfloat(exp(yl))
-    xh = prevfloat(exp(yh))
-
-    xl == xh && isinf(xl) && return nothing
-    return maybeinterval(xl, xh)
-end
-
