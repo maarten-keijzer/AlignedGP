@@ -27,7 +27,7 @@ function plot_best(strata)
     plot!(setup.inputs[1], lo, fillrange=hi, fillalpha=0.2, alpha=0, label="interval")
     plt = plot!(setup.inputs[1], ev)
     display(plt)
-    pop, bestindy, distr
+    pop, bestindy, distr, ev
 end
 
 #setup = keijzer1([sqrt, sin], [+,*,/,-])
@@ -41,30 +41,33 @@ setup = AlignedGP.keijzer4(tol=0.05, unaries=[exp, log, sqrt, sin]);
 setup.params.method = RecursiveStab
 strata, effort = initstrata(setup);
 
-begin
-    lasttime=time()
-    lasteffort = 0; last_processed = 0
+# Run inside a function so the loop bookkeeping (lasttime, lasteffort, …) are locals;
+# at top level a `for` body is soft scope and reassigning these globals is ambiguous.
+function evolve!(strata, setup, effort; effortcap = 10)
+    lasttime = time()
+    lasteffort = 0.0
+    last_processed = 0
     @time for nindies in 1:typemax(Int)
         iteratestrata!(strata, setup, effort)
         eff = AlignedGP.compute_effort(effort, length(setup.interval_targets))
-        
-        if log10(eff) > 10
-            break 
-        end
+
+        log10(eff) > effortcap && break
 
         if time() - lasttime > 2
-            lasttime=time() 
-            print("Δeffort $(round(log10(eff - lasteffort), digits=4)), Δprocessed $(nindies-last_processed) ")
+            lasttime = time()
+            print("Δeffort $(round(log10(eff - lasteffort), digits=4)), Δprocessed $(nindies - last_processed) ")
             besthits = print_report(strata, eff)
             # plot_best(strata)
-            if besthits==length(setup.interval_targets) break end
+            besthits == length(setup.interval_targets) && break
             lasteffort = eff
             last_processed = nindies
         end
     end
-end 
+end
 
-pop, bestindy, distr = plot_best(strata);
+evolve!(strata, setup, effort)
+
+pop, bestindy, distr, ev = plot_best(strata);
 bar(distr);
 
 using Statistics

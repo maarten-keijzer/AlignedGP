@@ -88,14 +88,17 @@ end;
         end
     end
 
-    @testset "two components → sample lands in a component, proportional to width" begin
+    @testset "two components → sample lands in a component, weighted by Cauchy prior mass" begin
         r = max_overlap_region([intervaltype(1.0, 3.0), intervaltype(1.0, 3.0), intervaltype(5.0, 9.0), intervaltype(5.0, 9.0)])
         rng = Random.MersenneTwister(42)
         results = [select_constant(r.region, rng) for _ in 1:4000]
         @test all(c -> (1.0 <= c <= 3.0 || 5.0 <= c <= 9.0), results)
         hits_first = count(c -> 1.0 <= c <= 3.0, results)
-        # widths 2 and 4 → first component chosen ~1/3 of the time
-        @test 0.28 < hits_first / 4000 < 0.40
+        # Selection is by Cauchy(0, γ=1) prior mass tempered by α=0.5, NOT by width.
+        # w ∝ (atan(hi) - atan(lo))^0.5: [1,3] → 0.681, [5,9] → 0.295, so the
+        # closer-to-zero component [1,3] is chosen ~0.70 of the time despite [5,9]
+        # being twice as wide (the Cauchy tail downweights large magnitudes).
+        @test 0.66 < hits_first / 4000 < 0.74
     end
 
     @testset "no integers in region → continuous sample within region" begin
@@ -105,16 +108,6 @@ end;
             c = select_constant(r.region, rng)
             @test 1.2 <= c <= 1.8
         end
-    end
-
-    @testset "wider component sampled more often (continuous path)" begin
-        region = [intervaltype(0.1, 0.2), intervaltype(0.4, 0.9)]
-        rng = Random.MersenneTwister(42)
-        hits_wide = count(1:10000) do _
-            c = select_constant(region, rng)
-            0.4 <= c <= 0.9
-        end
-        @test 0.78 < hits_wide / 10000 < 0.88
     end
 
     @testset "zero at boundary counts as in region" begin
@@ -143,16 +136,16 @@ end;
         end
     end
 
-    @testset "half-infinite region CI(lo, Inf) → returns finite bound" begin
+    @testset "half-infinite region CI(lo, Inf) → returns truncated Cauchy" begin
         region = [intervaltype(2.3, Inf)]  # width Inf → fall back to the finite bound
         c = select_constant(region)
-        @test c == 2.3
+        @test c >= 2.3
     end
 
-    @testset "half-infinite region CI(-Inf, hi) → returns finite bound" begin
+    @testset "half-infinite region CI(-Inf, hi) → returns truncated Cauchy" begin
         region = [intervaltype(-Inf, -1.7)]
         c = select_constant(region)
-        @test c == -1.7
+        @test c <= -1.7
     end
 
     @testset "two-ray region from division inverse — result in one of the rays" begin

@@ -94,70 +94,118 @@ end
 include("constant_sampler.jl")
 function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
     isempty(region) && return 0.0
+    any(in_interval.(Ref(0.0), region)) && return 0.0
     s = ConstantSampler()
     return draw_constant(rng, s, region)
 end
  
-const SEAM_TOL = 1e-12
+const TWO_PI = 2π
 
-function max_overlap_region_circular(arcs::Vector{IntervalType}, C::Float64 = 2π)
+"""
+    fold_stab(carcs::IntervalVector, C=2π) -> (; region, depth)
+    fold_stab(arcs::Vector{IntervalType}, C=2π)          # each arc its own case
 
-    isempty(arcs) && return (; region=IntervalType[], depth=0)
+Circular stab for the additive constant directly below `sin` (Situation 1 of
+`specs/sine-inversion.md`). The constant is only defined mod `C`, so every arc is
+reduced mod `C` and emitted **twice** — once where it lands, once translated by `-C` —
+so a region wrapping past 0 is found whole (§3.3). Full arcs (`w >= C`, i.e. the case
+is hit for every constant) are counted in `nfull` rather than materialised.
 
-    # Encode: (coordinate, 0) = enter, (coordinate, 1) = leave.
-    # A wrapping arc splits at the seam: tail [lo, C] plus head [0, hi-C].
-    events = Vector{Tuple{Float64,Int}}()
-    sizehint!(events, 2 * length(arcs) + 2)
-    for iv in arcs
-        lo, hi = bounds(iv)
-        if hi <= C
-            push!(events, (lo, 0));  push!(events, (hi, 1))
-        else
-            push!(events, (lo, 0));  push!(events, (C, 1))         # tail
-            push!(events, (0.0, 0)); push!(events, (hi - C, 1))    # head
+Depth counts **distinct cases**, not arcs: a sweep bumps depth only when a case's arc
+count goes 0→1 and drops it 1→0. A case can legitimately contribute several arcs (rising
++ falling, or several arcs after a composed inversion) that may even *touch* mod `C`
+after inner-rounding; counting cases rather than arcs keeps `depth == hits` without
+relying on the per-case disjointness invariant (§1 / open-question #4) holding exactly.
+
+Same `(; region, depth)` contract as `max_overlap_region`, with `nfull` folded in.
+"""
+fold_stab(arcs::Vector{IntervalType}, C::Float64 = TWO_PI) = fold_stab(IntervalVector(arcs), C)
+
+function fold_stab(carcs::IntervalVector, C::Float64 = TWO_PI)
+    # (coord, kind, case): kind 0 = enter, 1 = leave. Each non-full arc is emitted at
+    # s and s-C, both tagged with the owning case so same-case overlap counts once.
+    events = Tuple{Float64,Int,Int}[]
+    nfull  = 0
+    for i in eachindex(carcs)
+        arcs = carcs[i]
+        # A full arc (w >= C) means the case is hit for every constant. It then counts
+        # once via nfull and contributes no sweep events — including for any *other*
+        # (ordinary) arcs of the same case, which would otherwise double-count it.
+        if any(arc -> sup(arc) - inf(arc) >= C, arcs)
+            nfull += 1
+            continue
+        end
+        for arc in arcs
+            w = sup(arc) - inf(arc)
+            s = mod(inf(arc), C)
+            push!(events, (s, 0, i));     push!(events, (s + w, 1, i))
+            push!(events, (s - C, 0, i)); push!(events, (s - C + w, 1, i))
         end
     end
-    sort!(events)
+    isempty(events) && return (; region = IntervalType[], depth = nfull)
 
-    depth     = 0
-    max_depth = 0
-    seg_start = 0.0
+    sort!(events)                          # coord asc; enter(0) before leave(1) at ties
+
+    active     = zeros(Int, length(carcs)) # open-arc count per case
+    depth      = 0                         # number of distinct active cases
+    max_depth  = 0
+    seg_start  = 0.0
     components = IntervalType[]
-
-    for (coord, kind) in events        # ← identical to the linear version
-        if kind == 0        # enter
-            depth += 1
-            if depth > max_depth
-                max_depth = depth
-                empty!(components)
-                seg_start = coord
-            elseif depth == max_depth
-                seg_start = coord
+    for (coord, kind, case) in events
+        if kind == 0                       # enter
+            if active[case] == 0           # case becomes active
+                depth += 1
+                if depth > max_depth
+                    max_depth = depth
+                    empty!(components); seg_start = coord
+                elseif depth == max_depth
+                    seg_start = coord
+                end
             end
-        else                # leave
-            if depth == max_depth
-                push!(components, intervaltype(seg_start, coord))
+            active[case] += 1
+        else                               # leave
+            if active[case] == 1           # case becomes inactive
+                depth == max_depth && push!(components, intervaltype(seg_start, coord))
+                depth -= 1
             end
-            depth -= 1
+            active[case] -= 1
         end
     end
-
-    return (; region=merge_seam(components, C), depth=max_depth)
+    return (; region = components, depth = max_depth + nfull)
 end
 
-# A component straddling the seam leaves the sweep as two pieces —
-# one starting at 0, one ending at C. Physically they are one arc.
-function merge_seam(components::Vector{IntervalType}, C::Float64)
-    length(components) < 2 && return components
-    i0 = findfirst(c -> inf(c) <= SEAM_TOL,     components)
-    iC = findfirst(c -> sup(c) >= C - SEAM_TOL, components)
-    (i0 === nothing || iC === nothing || i0 == iC) && return components
+"""
+    circular_hits(carcs, value, C=2π) -> Int
 
-    merged = IntervalType[intervaltype(inf(components[iC]), C + sup(components[i0]))]
-    for (k, c) in enumerate(components)
-        (k == i0 || k == iC) && continue
-        push!(merged, c)
+Count how many cases the constant `value` hits, given the **c-space arcs** `carcs`
+(the same `(targets - evals)` arcs `fold_stab` folds). Case `i` hits when one of its
+arcs — reduced mod `C` and emitted at `s` and `s-C` exactly as in `fold_stab` — covers
+`value`, with **at most one hit per case** (the disjointness invariant of §1).
+
+Using `fold_stab`'s own arcs and endpoint arithmetic (rather than recomputing from the
+u-space `targets` and subtracting `evals`, which rounds differently) keeps this an
+independent recount of *disjointness* without drifting from the fold's depth by a ULP at
+a boundary. A hit against any `+kC` translate of the canonical arc is a genuine forward
+hit because `sin` is `C`-periodic, so this is the truthful hit count for the constant
+directly below `sin`; the linear `compute_hits` would miss translated hits.
+"""
+function circular_hits(carcs::IntervalVector, value::Real, C::Float64 = TWO_PI)
+    hits = 0
+    for i in eachindex(carcs)
+        for arc in carcs[i]
+            lo, hi = inf(arc), sup(arc)
+            w = hi - lo
+            if w >= C
+                hits += 1
+                break
+            end
+            s = mod(lo, C)
+            if (s <= value <= s + w) || (s - C <= value <= s - C + w)
+                hits += 1
+                break
+            end
+        end
     end
-    merged
+    return hits
 end
 
