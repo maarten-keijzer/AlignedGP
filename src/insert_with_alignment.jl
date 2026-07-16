@@ -86,7 +86,7 @@ function compute_added_value(evals, targets::IntervalVector, rng::AbstractRNG=Ra
     hits = compute_hits(evals, targets)
     
     if hits < depth
-        if abs(value) < 1e+100
+        if abs(value) < 1e+100 # Things get a little wonky around 1e380 (few ulps from Inf)
             @assert hits >= depth "$(compute_hits(evals, targets)), $depth $(minimum(evals)) $(maximum(evals)) val=$value intv=$res"
         end
     end

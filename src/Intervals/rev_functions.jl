@@ -88,7 +88,7 @@ function log_rev(y::IntervalType) :: Union{Nothing, IntervalType}
     return maybeinterval(xl, xh)
 end
 
-function sin_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType, IntervalType}}
+function sin_rev_org(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType, IntervalType}}
     yl, yh = bounds(y)
 
     cl = max(yl, -1.0)          # clamp target to sin's range [-1, 1]
@@ -126,7 +126,7 @@ end
 const TWOPI = intervaltype(2) * intervaltype(π)
 const FULL_CIRCLE = intervaltype(0.0, sup(TWOPI))
 
-function sin_rev_circular(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType,IntervalType}}
+function sin_rev(y::IntervalType) :: Union{Nothing, IntervalType, Tuple{IntervalType,IntervalType}}
     yl, yh = bounds(y)
     cl, ch = max(yl, -1.0), min(yh, 1.0)
     cl > ch && return nothing

@@ -94,6 +94,7 @@ end
 include("constant_sampler.jl")
 function select_constant(region::Vector{IntervalType}, rng::AbstractRNG=Random.GLOBAL_RNG)
     isempty(region) && return 0.0
+    any(in_interval.(Ref(0.0), region)) && return 0.0
     s = ConstantSampler()
     return draw_constant(rng, s, region)
 end

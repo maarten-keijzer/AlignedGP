@@ -174,7 +174,7 @@ end;
     end
 end;
 
-#@testset "sin_rev" begin
+@testset "sin_rev" begin
     # Normalise the Union{Nothing,Interval,Tuple} return into a vector of arcs.
     arcs(r) = r === nothing ? IntervalType[] : (r isa Tuple ? collect(r) : [r])
 
@@ -232,21 +232,21 @@ end;
         @test isnothing(sin_rev(y))
     end
 
-    @testset "trough covered splits across the seam (two arcs)" begin
-        y = intervaltype(-1.5, -0.5)          # trough included, peak not
-        x = sin_rev(y)
-        @test x isa Tuple                     # two arcs at the window edges,
-                                            # adjacent through the seam, not the interior
-        a, b = x
-        @test sup(a) < inf(b)                 # a ≈ [-π/2, -π/6], b ≈ [7π/6, 3π/2]
-        # soundness spot-check: both arcs map back inside the (clamped) target
-        @test issubset_interval(sin(a), intervaltype(-1.0, -0.5))
-        @test issubset_interval(sin(b), intervaltype(-1.0, -0.5))
-    end;
+    # @testset "trough covered splits across the seam (two arcs)" begin
+    #     y = intervaltype(-1.5, -0.5)          # trough included, peak not
+    #     x = sin_rev(y)
+    #     @test x isa Tuple                     # two arcs at the window edges,
+    #                                         # adjacent through the seam, not the interior
+    #     a, b = x
+    #     @test sup(a) < inf(b)                 # a ≈ [-π/2, -π/6], b ≈ [7π/6, 3π/2]
+    #     # soundness spot-check: both arcs map back inside the (clamped) target
+    #     @test issubset_interval(sin(a), intervaltype(-1.0, -0.5))
+    #     @test issubset_interval(sin(b), intervaltype(-1.0, -0.5))
+    # end;
 
     @testset "trough covered merges through the seam (one arc)" begin
         y = intervaltype(-1.5, -0.5)          # trough included, peak not
-        x = sin_rev_circular(y)
+        x = sin_rev(y)
         @test x isa IntervalType               # merged, not split
         lo, hi = bounds(x)
         @test lo ≈ 7π/6  atol=1e-9             # π − asin(−0.5)
@@ -257,7 +257,7 @@ end;
     end
 
     @testset "trough arc is not double-covered at 3π/2" begin
-        x = sin_rev_circular(intervaltype(-1.5, -0.5))
+        x = sin_rev(intervaltype(-1.5, -0.5))
         @test x isa IntervalType
         @test in_interval(3π/2, x)             # trough is interior, covered once
     end
