@@ -127,18 +127,20 @@ function fold_stab(carcs::IntervalVector, C::Float64 = TWO_PI)
     events = Tuple{Float64,Int,Int}[]
     nfull  = 0
     for i in eachindex(carcs)
-        casefull = false
-        for arc in carcs[i]
+        arcs = carcs[i]
+        # A full arc (w >= C) means the case is hit for every constant. It then counts
+        # once via nfull and contributes no sweep events — including for any *other*
+        # (ordinary) arcs of the same case, which would otherwise double-count it.
+        if any(arc -> sup(arc) - inf(arc) >= C, arcs)
+            nfull += 1
+            continue
+        end
+        for arc in arcs
             w = sup(arc) - inf(arc)
-            if w >= C
-                casefull = true
-                break
-            end
             s = mod(inf(arc), C)
             push!(events, (s, 0, i));     push!(events, (s + w, 1, i))
             push!(events, (s - C, 0, i)); push!(events, (s - C + w, 1, i))
         end
-        casefull && (nfull += 1)
     end
     isempty(events) && return (; region = IntervalType[], depth = nfull)
 

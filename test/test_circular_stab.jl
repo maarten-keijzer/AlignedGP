@@ -82,6 +82,15 @@ end
         r = AlignedGP.fold_stab(carcs)
         @test r.depth == 2
     end
+
+    @testset "a case with both an ordinary and a full arc counts once" begin
+        # A composed target can give one case a full-circle arc (w ≥ C, always hits)
+        # alongside an ordinary arc. The case must count once (nfull) — not once in
+        # nfull plus once in the sweep for the ordinary arc.
+        carcs = IntervalVector([intervaltype(1.0, 1.2), intervaltype(0.0, 7.0)], [1, 3])
+        r = AlignedGP.fold_stab(carcs)
+        @test r.depth == 1
+    end
 end
 
 # ---------------------------------------------------------------------------
