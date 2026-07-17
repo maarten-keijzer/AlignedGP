@@ -34,3 +34,6 @@ end
 @testset "Linear Scaling" begin
     include("test_linear_scaling.jl")
 end
+@testset "Two Band" begin
+    include("test_two_band.jl")
+end
