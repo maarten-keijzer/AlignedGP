@@ -40,15 +40,17 @@ end
 
 export keijzer1, keijzer4, keijzer4_dup, load_pmlb
 
-function keijzer4(;tol=0.01, unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /])
+function keijzer4(;noise = 0.0, tol=0.01, unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /])
     x = collect(0.0:0.1:10.0)
     t = @. x^3 * exp(-x) * cos(x) * sin(x) * (sin(x)^2 * cos(x) - 1)
+
+    noisy = @. t +  noise * randn()
 
     ProblemSetup(
         [x],
         t,
-        t,
-        IntervalVector(intervaltype.(t .- tol, t .+ tol)),
+        noisy,
+        IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
         SymbolTable(1, unaries, binaries),
         GPParams(),
         Random.GLOBAL_RNG
@@ -109,12 +111,11 @@ function load_pmlb(
     )
 end
 
-function keijzer1(unaries=[sqrt, log, exp], binaries=[+,-,*,/]; rng::AbstractRNG=Random.GLOBAL_RNG)
+function keijzer1(; noise = 0.0, tol=0.01, unaries=[sqrt, log, exp], binaries=[+,-,*,/], rng::AbstractRNG=Random.GLOBAL_RNG)
     x = sort(rand(rng, 100))
     t = @. 0.3 * x * sin(2π * x)
-    tol = 0.01
 
-    noisy = @. t #+  tol/2 * randn()
+    noisy = @. t +  noise * randn()
 
     ProblemSetup(
         [x],

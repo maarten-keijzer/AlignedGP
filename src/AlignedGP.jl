@@ -25,7 +25,7 @@ export evaluate, inverse
 export compute_hits, hitvector
 export AddedValue, Node, Var, Constant, BinaryNode, UnaryNode, Tree, insert, insert_with_alignment, complexity
 export scaled_evaluate, linear_scale, linear_scale_l1
-export SymbolTable,init, initstrata, iteratestrata!, print_report
+export SymbolTable,init, initstrata, iteratestrata!
 export valid_init, initial_fit, optimize
 export ProblemSetup, GPParams
 

@@ -89,7 +89,7 @@ end
 
 tol=0.025
 effort = 9.5
-nruns = 20
+nruns = 40
 setup = keijzer4(tol=tol)
 dir = "data/keijzer4_circular_$(tol)_$(effort)"
 

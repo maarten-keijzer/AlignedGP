@@ -170,8 +170,8 @@ experiments = read_setup("data/keijzer4_0.025_9.5")
 delete!(experiments, "fbf651e8")
 delete!(experiments, "5005c278")
 experiments2 = read_setup("data/keijzer4_circular_0.025_9.5")
-experiments2["95bb3a77"].params.method = Stab
-experiments["bla"] = experiments2["95bb3a77"]
+experiments2["f55902ee"].params.method = Stab
+experiments["bla"] = experiments2["f55902ee"]
 
 plot_experiments(experiments, log_scale=false, x_axis=:effort, y_axis=:success_rate,
                  output="doc/figs/experiments_success.pdf")

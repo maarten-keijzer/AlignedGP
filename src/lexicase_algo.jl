@@ -118,7 +118,7 @@ function find_least_contributor(pop::Vector{Tree})
     return highest_index
 end
 
-function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effort::EffortStats)
+function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effort::EffortStats) :: Int
     method = setup.params.method
 
     if setup.params.use_tournament_stratum
@@ -190,53 +190,34 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
         end
     end
     tree = evaluate_to_tree(child, setup)
-    if isnothing(tree) || sum(tree.hits) == 0
+    
+    #invalid?
+    if isnothing(tree) || sum(tree.hits) == 0 || complexity(tree) > length(strata)
         return 0
     end
 
-    if complexity(tree) <= length(strata)
-        push!(strata[complexity(tree)], tree)
+    push!(strata[complexity(tree)], tree)
 
-        # remove an individual from random pop
-        heavy_pop = argmax([length(stratum) for stratum in strata])
-        pop3 = strata[heavy_pop]
-        while length(pop3) < 2
-            pop3 = rand(strata)
-        end
-
-        # result = find_dominated_trees(pop3)
-        # if isnothing(result)
-        #     to_delete = find_replacement(pop3)
-        # else
-        #     to_delete = result[1]
-        # end
-
-        to_delete = find_replacement(pop3)
-        #to_delete = inverse_lexicase(pop3, setup.max_lexicase_comparisons, setup.rng)
-        #to_delete = find_least_contributor(pop3)
-
-        deleteat!(pop3, to_delete)
+    # remove an individual from random pop
+    heavy_pop = argmax([length(stratum) for stratum in strata])
+    pop3 = strata[heavy_pop]
+    while length(pop3) < 2
+        pop3 = rand(strata)
     end
-    sum(tree.hits)
-end
 
-function print_report(strata::Vector{Vector{Tree}}, effort)
-    nIndies = 0
-    nHits = 0
-    besthits = 0
-    best = nothing
-    for stratum in strata
-        for indy in stratum
-            nIndies += 1
-            nHits += sum(indy.hits)
-            if sum(indy.hits) > besthits
-                besthits = sum(indy.hits)
-                best = indy
-            end
-        end
-    end
-    println("best $besthits, avg $(round(nHits/nIndies, digits=2)), mse $(round(best.mse, digits=7)) complexity $(best.complexity) avg-pathlen $(round(best.pathlen_complexity / best.complexity, digits=3)), effort $(round(log10(effort), digits=4))")
-    return besthits
+    # result = find_dominated_trees(pop3)
+    # if isnothing(result)
+    #     to_delete = find_replacement(pop3)
+    # else
+    #     to_delete = result[1]
+    # end
+
+    to_delete = find_replacement(pop3)
+    #to_delete = inverse_lexicase(pop3, setup.max_lexicase_comparisons, setup.rng)
+    #to_delete = find_least_contributor(pop3)
+
+    deleteat!(pop3, to_delete)
+    return sum(tree.hits)
 end
 
 function coordinate_descent(tree::Tree, setup::ProblemSetup, ntries)
