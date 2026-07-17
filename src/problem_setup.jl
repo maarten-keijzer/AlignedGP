@@ -22,6 +22,10 @@ end
     use_l2_scaling::Bool = true
     constant_stab_probability = 0.2
     use_tournament_stratum = false
+    # Outer (secondary) tolerance band half-width for the two-band ratchet.
+    # Start it equal to the inner tol; the feature is OFF while tau_outer == tol
+    # (secondary band ≡ inner band ⇒ single-band search).
+    tau_outer::Float64 = 0.0
 end
 
 struct ProblemSetup 
@@ -52,7 +56,7 @@ function keijzer4(;noise = 0.0, tol=0.01, unaries=[sin, exp, log, sqrt], binarie
         noisy,
         IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
         SymbolTable(1, unaries, binaries),
-        GPParams(),
+        GPParams(tau_outer = tol),
         Random.GLOBAL_RNG
     )
 end
@@ -71,7 +75,7 @@ function keijzer4_dup()
         vcat(t,t),
         vcat(int1, int2),
         SymbolTable(1, [exp, cos, sin], [+, *, -, /]),
-        GPParams(),
+        GPParams(tau_outer = tol2),
         Random.GLOBAL_RNG
     )
 end
@@ -98,6 +102,7 @@ function load_pmlb(
     inputs = [data[:, i] for i in feature_cols]
 
     params = GPParams()
+    params.tau_outer = tol
     params.max_lexicase_comparisons = min(params.max_lexicase_comparisons, length(targets))
 
     ProblemSetup(
@@ -123,7 +128,7 @@ function keijzer1(; noise = 0.0, tol=0.01, unaries=[sqrt, log, exp], binaries=[+
         noisy,
         IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
         SymbolTable(1, unaries, binaries),
-        GPParams(),
+        GPParams(tau_outer = tol),
         rng
     )
 end
