@@ -197,3 +197,47 @@ end
         end
     end
 end
+
+# ---------------------------------------------------------------------------
+# Integration — Tree fields, retarget, and the ratchet band transition through
+# a real ProblemSetup (no re-evaluation on retarget).
+# ---------------------------------------------------------------------------
+@testset "two-band Tree integration" begin
+    setup = keijzer1(tol=0.5, noise=0.0, rng=MersenneTwister(2024))
+    n = length(setup.interval_targets)
+    node = BinaryNode(+, Var(1), Constant(0.3))
+    tree = AlignedGP.evaluate_to_tree(node, setup)
+
+    @testset "fields are populated and self-consistent" begin
+        @test length(tree.evals) == n
+        @test length(tree.secondary_hits) == n
+        @test tree.loss ≈ two_band_loss(tree.hits, tree.secondary_hits)
+        @test all(tree.secondary_hits[i] for i in 1:n if tree.hits[i])   # containment
+    end
+
+    @testset "single-band start (τ_outer == tol): secondary ≡ primary" begin
+        @test setup.params.tau_outer == 0.5
+        @test tree.hits == tree.secondary_hits
+    end
+
+    @testset "ratchet: retarget tightens inner band without re-evaluating" begin
+        setup.params.tau_outer = 0.5                       # freeze floor
+        new_tol = 0.1
+        newint = IntervalVector(intervaltype.(setup.noisy_targets .- new_tol,
+                                              setup.noisy_targets .+ new_tol))
+        setup.interval_targets.intervals .= newint.intervals
+
+        rt = retarget(tree, setup)
+        @test isequal(rt.evals, tree.evals)                # evals reused, not recomputed
+        @test rt.slope == tree.slope && rt.intercept == tree.intercept && rt.mse == tree.mse
+        @test all(rt.secondary_hits[i] for i in 1:n if rt.hits[i])   # containment holds
+        @test sum(rt.hits) <= sum(rt.secondary_hits)       # tighter inner ⊆ outer floor
+        @test rt.loss ≈ two_band_loss(rt.hits, rt.secondary_hits)
+
+        # retarget agrees with a full re-evaluation against the same bands
+        fresh = AlignedGP.evaluate_to_tree(tree.root, setup)
+        @test rt.hits == fresh.hits
+        @test rt.secondary_hits == fresh.secondary_hits
+        @test rt.loss ≈ fresh.loss
+    end
+end

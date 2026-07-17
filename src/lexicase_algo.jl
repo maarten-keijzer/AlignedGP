@@ -75,6 +75,8 @@ function inverse_lexicase(pop::Vector{Tree}, max_lexicase::Int, rng)
     return rand(rng, remaining)
 end
 
+# Dormant (unused) selector: still on the raw maximize framing (primary-hit count),
+# not two-band loss. Update to `.loss` if it is ever wired back into iteratestrata!.
 function tourney(pop::Vector{Tree}, t=5)
     champion = rand(pop)
     if t > 1
@@ -94,7 +96,8 @@ function find_replacement(pop::Vector{Tree})
         indy2 = rand(1:length(pop))
     end
 
-    if sum(pop[indy1].hits) < sum(pop[indy2].hits)
+    # Route replacement through two-band loss (lower is better): delete the worse.
+    if pop[indy1].loss > pop[indy2].loss
         indy2 = indy1
     end
     return indy2
@@ -122,11 +125,13 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
     method = setup.params.method
 
     if setup.params.use_tournament_stratum
+        # Dormant path (off by default): stratum ranking still uses the raw maximize
+        # framing (max primary-hit count), not two-band loss.
         maxhits = 0
         maxhitstratum = 1
-        for i in eachindex(strata) 
-            if isempty(strata[i]) 
-                continue 
+        for i in eachindex(strata)
+            if isempty(strata[i])
+                continue
             end
             hits = maximum(sum(indy.hits) for indy in strata[i])
             if hits > maxhits
@@ -155,7 +160,7 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
         end
     end
 
-    indy1 = lexicase(pop1, setup.params.max_lexicase_comparisons, setup.rng)
+    indy1 = two_band_lexicase(pop1, setup.params.max_lexicase_comparisons, setup.rng)
     # indy1 = tourney(pop1)
     # indy2 = tourney(pop2)
     if rand(setup.rng) < setup.params.cross_mut_prob
@@ -166,7 +171,7 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
             selection = rand(range)
         end
         pop2 = strata[selection]
-        indy2 = lexicase(pop2, setup.params.max_lexicase_comparisons, setup.rng)
+        indy2 = two_band_lexicase(pop2, setup.params.max_lexicase_comparisons, setup.rng)
         if method == Standard || method == ConstantStab
             child = standard_crossover(indy1.root, indy2.root, effort, setup.rng)
         elseif method == Stab

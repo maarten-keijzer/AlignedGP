@@ -88,3 +88,11 @@ function two_band_lexicase(primary::AbstractVector{<:AbstractVector{Bool}},
     pool = two_band_lexicase_pool(primary, secondary, view(order, 1:ncases))
     return length(pool) == 1 ? pool[1] : rand(rng, pool)
 end
+
+# Production selection over a population of Trees: two-band lexicase on the cached
+# per-tree primary (`hits`) and outer-band (`secondary_hits`) bitvectors.
+function two_band_lexicase(pop::AbstractVector{Tree}, max_lexicase::Int, rng)
+    primary = [t.hits for t in pop]
+    secondary = [t.secondary_hits for t in pop]
+    return pop[two_band_lexicase(primary, secondary, max_lexicase, rng)]
+end
