@@ -133,3 +133,22 @@ function keijzer1(; noise = 0.0, tol=0.01, unaries=[sqrt, log, exp], binaries=[+
     )
 end
 
+export pagie
+function pagie(;noise = 0.0, tol=0.01, unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /])
+    x = rand(500) * 10 .- 5
+    y = rand(500) * 10 .- 5
+    t = @. 1/(1+x^-4) + 1/(1+y^-4)
+
+    noisy = @. t +  noise * randn()
+
+    ProblemSetup(
+        [x, y],
+        t,
+        noisy,
+        IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
+        SymbolTable(1, unaries, binaries),
+        GPParams(tau_outer = tol),
+        Random.GLOBAL_RNG
+    )
+end
+

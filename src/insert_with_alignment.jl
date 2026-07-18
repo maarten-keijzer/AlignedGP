@@ -4,7 +4,11 @@ It will also update the added values of all nodes upward
 """
 function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; circular::Bool = false)
 
-    if i == 1
+    if nintervals(targets) > 10length(targets)
+        @warn "Many intervals generated: $(nintervals(targets))"
+    end
+
+    if i == 1 
         return align_node(donation, targets, inputs; circular=circular)..., d # find best additive constant
     elseif i <= 1 + length(recipient.left)
         # Evaluate right child -- keep

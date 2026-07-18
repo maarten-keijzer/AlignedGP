@@ -15,7 +15,7 @@ Base.:*(iv::IntervalType, x::Real) = iv * bareinterval(x)
 
 export IntervalType, intervaltype
 export sqrt_rev, add_rev, mul_rev, inv_rev, sin_rev, exp_rev, log_rev, umin_rev
-export IntervalVector, invert, isperiodic
+export IntervalVector, invert, isperiodic, nintervals
 
 include("rev_functions.jl")
 
@@ -41,6 +41,8 @@ ncases(off) = length(off) - 1
 Base.getindex(iv::IntervalVector, i::Int) = caseview(iv.intervals, iv.offsets, i)
 Base.eachindex(iv::IntervalVector) = 1:ncases(iv.offsets)
 Base.length(iv::IntervalVector) = ncases(iv.offsets)
+
+nintervals(iv::IntervalVector) = length(iv.intervals)
 
 function invert(iv::IntervalVector, rev_fun)
     intervals = IntervalType[]

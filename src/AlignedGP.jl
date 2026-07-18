@@ -28,7 +28,7 @@ export compute_hits, hitvector
 export two_band_hits, two_band_loss, two_band_score, two_band_lexicase, two_band_lexicase_pool
 export retarget
 export AddedValue, Node, Var, Constant, BinaryNode, UnaryNode, Tree, insert, insert_with_alignment, complexity
-export scaled_evaluate, linear_scale, linear_scale_l1
+export model_evaluations, linear_scale, linear_scale_l1
 export SymbolTable,init, initstrata, iteratestrata!
 export valid_init, initial_fit, optimize
 export ProblemSetup, GPParams, simplify

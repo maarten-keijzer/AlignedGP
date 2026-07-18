@@ -13,8 +13,10 @@ function initstrata(setup::ProblemSetup)
         if isnothing(tree)
             continue
         end
-        cmp = min(length(strata), complexity(tree))
-        push!(strata[cmp], tree)
+        if complexity(tree) > length(strata) 
+            continue 
+        end
+        push!(strata[complexity(tree)], tree)
         total += 1
         nevals += tree.complexity
     end
@@ -90,6 +92,7 @@ end
 
 
 function find_replacement(pop::Vector{Tree})
+    @assert length(pop) > 1
     indy1 = rand(1:length(pop))
     indy2 = rand(1:length(pop))
     while indy1 == indy2

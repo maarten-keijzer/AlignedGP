@@ -1,25 +1,31 @@
 
 struct Tree
     root::Node
+    
     hits::BitVector             # primary (inner-band) hits
     secondary_hits::BitVector   # outer-band hits; ⊇ primary under the containment invariant
+    
     loss::Float64               # two_band_loss(hits, secondary_hits); lower is better
+    isscaledloss::Bool          # Is the loss obtained through scaling?    
+    
     complexity::Int
     pathlen_complexity::Int
+    
     slope::Float64
     intercept::Float64
     mse::Float64
-    scaled_hitcount::Int
+    
     evals::Vector{Float64}      # cached raw node output; tol-invariant, drives retarget
-    # Lightweight wrapper (e.g. for `evaluate`) — no fitness computed yet.
+    
+    #Lightweight wrapper (e.g. for `evaluate` and testing) — no fitness computed yet.
     Tree(root::Node, hits::BitVector) =
-        new(root, hits, BitVector(), Inf, complexity(root), pathlen_complexity(root),
-            1.0, 0.0, Inf, 0, Float64[])
-    Tree(root::Node, hits::BitVector, secondary_hits::BitVector, loss::Float64,
-         slope::Float64, intercept::Float64, mse::Float64, scaled_hitcount::Int,
+        new(root, hits, BitVector(), Inf, false, complexity(root), pathlen_complexity(root),
+            1.0, 0.0, Inf, Float64[])
+    Tree(root::Node, hits::BitVector, secondary_hits::BitVector, loss::Float64, isscaledloss::Bool,
+         slope::Float64, intercept::Float64, mse::Float64,
          evals::Vector{Float64}) =
-        new(root, hits, secondary_hits, loss, complexity(root), pathlen_complexity(root),
-            slope, intercept, mse, scaled_hitcount, evals)
+        new(root, hits, secondary_hits, loss, isscaledloss, complexity(root), pathlen_complexity(root),
+            slope, intercept, mse, evals)
 end
 
 
@@ -27,7 +33,7 @@ Base.length(t::Tree) = length(t.root)
 complexity(t::Tree) = t.complexity
 pathlen_complexity(t::Tree) = t.pathlen_complexity
 evaluate(tree::Tree, x) = evaluate(tree.root, x)
-scaled_evaluate(tree::Tree, x) = tree.slope .* evaluate(tree.root, x) .+ tree.intercept
+model_evaluations(tree::Tree) = tree.isscaledloss ? tree.slope .* tree.evals .+ tree.intercept : tree.evals
 Base.getindex(tree::Tree, i::Int) = getindex(tree.root, i)
 
 function hitvector(ev::Vector{<:Real}, t::IntervalVector)
@@ -84,19 +90,18 @@ function _tree_from_evals(node::Node, output::Vector{Float64},
     tau_outer = setup.params.tau_outer
 
     p_raw, s_raw = two_band_hits(output, targets, noisy, tau_outer)
+    raw_loss = two_band_loss(p_raw, s_raw)
 
     scaled_out = slope .* output .+ intercept
     p_sc, s_sc = two_band_hits(scaled_out, targets, noisy, tau_outer)
-    scaled_hitcount = sum(p_sc)
+    scaled_loss = two_band_loss(p_sc, s_sc)
 
-    if scaled_hitcount > sum(p_raw)
-        hits, secondary = p_sc, s_sc
-    else
-        hits, secondary = p_raw, s_raw
-    end
-    loss = two_band_loss(hits, secondary)
+    isloss_scaled = scaled_loss < raw_loss
+    loss = isloss_scaled ? scaled_loss : raw_loss
+    hits = isloss_scaled ? p_sc : p_raw 
+    secondary = isloss_scaled ? s_sc : s_raw
 
-    return Tree(node, hits, secondary, loss, slope, intercept, mse, scaled_hitcount, output)
+    return Tree(node, hits, secondary, loss, isloss_scaled, slope, intercept, mse, output)
 end
 
 
