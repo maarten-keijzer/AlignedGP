@@ -124,6 +124,18 @@ function find_least_contributor(pop::Vector{Tree})
     return highest_index
 end
 
+# Parent selector dispatch: residual ε-lexicase when enabled, else two-band lexicase.
+# Only PARENT selection is affected; constant fitting, replacement, and hit/loss
+# bookkeeping are untouched.
+function select_parent(pop::Vector{Tree}, setup::ProblemSetup)
+    if setup.params.use_residual_lexicase
+        return residual_eps_lexicase(pop, setup.noisy_targets,
+                                     setup.params.max_lexicase_comparisons, setup.rng)
+    else
+        return two_band_lexicase(pop, setup.params.max_lexicase_comparisons, setup.rng)
+    end
+end
+
 function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effort::EffortStats) :: Int
     method = setup.params.method
 
@@ -163,7 +175,7 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
         end
     end
 
-    indy1 = two_band_lexicase(pop1, setup.params.max_lexicase_comparisons, setup.rng)
+    indy1 = select_parent(pop1, setup)
     # indy1 = tourney(pop1)
     # indy2 = tourney(pop2)
     if rand(setup.rng) < setup.params.cross_mut_prob
@@ -174,7 +186,7 @@ function iteratestrata!(strata::Vector{Vector{Tree}}, setup::ProblemSetup, effor
             selection = rand(range)
         end
         pop2 = strata[selection]
-        indy2 = two_band_lexicase(pop2, setup.params.max_lexicase_comparisons, setup.rng)
+        indy2 = select_parent(pop2, setup)
         if method == Standard || method == ConstantStab
             child = standard_crossover(indy1.root, indy2.root, effort, setup.rng)
         elseif method == Stab

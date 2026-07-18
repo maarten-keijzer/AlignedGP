@@ -26,6 +26,10 @@ end
     # Start it equal to the inner tol; the feature is OFF while tau_outer == tol
     # (secondary band ≡ inner band ⇒ single-band search).
     tau_outer::Float64 = 0.0
+    # Experimental: swap PARENT selection from two-band lexicase to residual ε-lexicase
+    # (semi-dynamic, MAD-based). OFF by default ⇒ byte-identical to the two-band path.
+    # Constant fitting, replacement, and hit/loss bookkeeping are unaffected.
+    use_residual_lexicase::Bool = false
 end
 
 struct ProblemSetup 

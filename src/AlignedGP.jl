@@ -26,6 +26,7 @@ export max_overlap_region, select_constant
 export evaluate, inverse
 export compute_hits, hitvector
 export two_band_hits, two_band_loss, two_band_score, two_band_lexicase, two_band_lexicase_pool
+export residual_eps_lexicase, select_parent
 export retarget
 export AddedValue, Node, Var, Constant, BinaryNode, UnaryNode, Tree, insert, insert_with_alignment, complexity
 export model_evaluations, linear_scale, linear_scale_l1
