@@ -37,3 +37,6 @@ end
 @testset "Two Band" begin
     include("test_two_band.jl")
 end
+@testset "Simplify" begin
+    include("test_simplify.jl")
+end

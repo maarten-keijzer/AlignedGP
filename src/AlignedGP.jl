@@ -14,6 +14,7 @@ include("interval_alignment.jl")
 include("functions.jl")
 include("nodes.jl")
 include("tree.jl")
+include("simplify.jl")
 include("two_band.jl")
 include("insert_with_alignment.jl")
 include("linear_scaling.jl")
@@ -30,7 +31,7 @@ export AddedValue, Node, Var, Constant, BinaryNode, UnaryNode, Tree, insert, ins
 export scaled_evaluate, linear_scale, linear_scale_l1
 export SymbolTable,init, initstrata, iteratestrata!
 export valid_init, initial_fit, optimize
-export ProblemSetup, GPParams
+export ProblemSetup, GPParams, simplify
 
 export sin_rev_circular
 export coordinate_descent
