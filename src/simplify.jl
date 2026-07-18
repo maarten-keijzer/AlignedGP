@@ -31,8 +31,16 @@ end
 
 # Inject a raw numeric value as a SymPy number. Integer-valued floats become
 # `Integer` (so `3.0` prints as `3`), everything else stays a `Float`.
+#
+# Only values up to Float64's exact-integer limit (`_NUM_CAP == 2^53`) go to
+# `Integer`. Above it an integer-valued float's low digits are binary artifacts
+# — e.g. `-2.9e105` expands to a 106-digit "exact" integer whose trailing digits
+# are meaningless — so a compact `Float` is both honest and readable, and avoids
+# the `Int64` overflow that `Int(v)` would hit. (A region-aware pass could pick
+# the shortest `m*10^n` value inside the equivalence interval instead of the raw
+# float; deferred — see _nice_from_region.)
 function _num(sympy, v::Real)
-    isinteger(v) && return sympy.Integer(Int(v))
+    (isinteger(v) && abs(v) <= _NUM_CAP) && return sympy.Integer(Int(v))
     return sympy.Float(v)
 end
 
@@ -40,6 +48,7 @@ end
 
 const _RATIONAL_DEN_CAP = 10_000    # bare rationals: denominator ceiling
 const _CONST_CAP = 20               # rational-multiple forms: |num|,den ceiling
+const _NUM_CAP = 2^53               # largest numerator kept exact as Float64/Int
 const _CONST_PENALTY = 2            # cost of introducing a named constant
 
 # Named irrational constants tried as `r * c`: (numeric value, SymPy expr).
@@ -54,27 +63,48 @@ _named_constants(sympy) = [
 ]
 
 # Smallest-denominator rational p/q with lo <= p/q <= hi, or `nothing` if none
-# has denominator <= `den_cap`. Stern-Brocot search; handles sign and zero.
+# has denominator <= `den_cap`. Continued-fraction (Stern-Brocot) search: runs
+# in O(number of CF terms), not O(value), so wide/large intervals resolve in a
+# handful of steps instead of walking mediant-by-mediant. Handles sign and zero.
 function _simplest_rational(lo::Real, hi::Real; den_cap::Int)
     lo <= 0 <= hi && return (0, 1)
     if hi < 0
         r = _simplest_rational(-hi, -lo; den_cap=den_cap)
         return r === nothing ? nothing : (-r[1], r[2])
     end
-    # 0 < lo <= hi: walk the Stern-Brocot tree between 0/1 and 1/0.
-    a, b, c, d = 0, 1, 1, 0
-    while true
-        p, q = a + c, b + d
-        q > den_cap && return nothing
-        v = p / q
-        if v < lo
-            a, b = p, q
-        elseif v > hi
-            c, d = p, q
-        else
-            return (p, q)
-        end
+    # 0 < lo <= hi
+    return _cf_simplest(float(lo), float(hi), den_cap, 0, 1)
+end
+
+# Simplest p/q in [lo, hi] for 0 < lo <= hi, with q <= den_cap, else `nothing`.
+#
+# `qb_prev`/`qb_cur` are a running Fibonacci lower bound on the denominator of
+# any rational reachable at or below this level (each CF term is >= 1, so the
+# convergent denominators grow at least Fibonacci-fast). Pruning the descent as
+# soon as that bound passes `den_cap` bounds the depth to ~log_phi(den_cap): a
+# degenerate interval (lo == hi) otherwise recurses on its own continued
+# fraction forever — floating-point rounding keeps it from ever landing on an
+# exact integer — and blows the stack. The bound never exceeds the true
+# denominator at the same depth, so no valid result is pruned.
+function _cf_simplest(lo::Float64, hi::Float64, den_cap::Int, qb_prev::Int, qb_cur::Int)
+    qb_cur > den_cap && return nothing
+    # The smallest-|value| integer in the interval is the simplest possible
+    # rational (denominator 1). ceil(lo) is that integer when it fits under hi.
+    n = ceil(lo)
+    if n <= hi
+        # Guard against numerators too large to hold exactly as an Int: a region
+        # this wide pins no "nice" constant, so report none rather than overflow.
+        (isfinite(n) && n <= _NUM_CAP) || return nothing
+        return (Int(n), 1)
     end
+    # No integer strictly inside, so floor(lo) == floor(hi). Peel it off and
+    # recurse on the reciprocal of the fractional part (the next CF term).
+    fl = floor(lo)
+    sub = _cf_simplest(1 / (hi - fl), 1 / (lo - fl), den_cap, qb_cur, qb_prev + qb_cur)
+    sub === nothing && return nothing
+    n2, d2 = sub                       # p/q = fl + d2/n2 = (fl*n2 + d2)/n2
+    n2 > den_cap && return nothing     # denominators only grow with depth
+    return (Int(fl) * n2 + d2, n2)
 end
 
 # Digit-count cost of a rational's written form.
