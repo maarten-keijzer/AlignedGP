@@ -93,11 +93,6 @@ function constant_stab_mutation(indy::Tree, inputs, targets, effort, rng)
     else
         id = rand(eachindex(constants))
 
-        if indy.slope != 0.0
-            targets = targets .- indy.intercept 
-            targets = targets .* inv(indy.slope)
-        end
-
         tree, _, d = insert_with_alignment(root, nodes[id], id, 1, inputs, targets, false)
         effort.sum_evals += d-1 
         effort.sum_stabs += 1

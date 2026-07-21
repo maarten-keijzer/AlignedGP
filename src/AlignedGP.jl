@@ -21,6 +21,7 @@ include("linear_scaling.jl")
 include("init.jl")
 include("variation.jl")
 include("lexicase_algo.jl")
+include("front.jl")
 
 export max_overlap_region, select_constant
 export evaluate, inverse
@@ -33,8 +34,12 @@ export model_evaluations, linear_scale, linear_scale_l1
 export SymbolTable,init, initstrata, iteratestrata!
 export valid_init, initial_fit, optimize
 export ProblemSetup, GPParams, simplify
+export min_tolerance, pathlen_complexity
 
 export sin_rev_circular
 export coordinate_descent
+
+export Front, add_to_front!, merge_with_front!, complexities_front, errors_front
+
 
 end # module AlignedGP

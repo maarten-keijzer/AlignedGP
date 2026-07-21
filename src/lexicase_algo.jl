@@ -41,7 +41,7 @@ function lexicase(pop::Vector{Tree}, max_lexicase::Int, rng)
         case = cases[i]
         new_remaining = []
         for j in remaining
-            if pop[j].hits[case]
+            if pop[j].hits[case] 
                 push!(new_remaining, j)
             end
         end
@@ -244,22 +244,36 @@ function coordinate_descent(tree::Tree, setup::ProblemSetup, ntries)
     x = setup.inputs
     t = setup.interval_targets
 
-    node = tree.root
-    besthits = sum(tree.hits)
-    println("Original: $besthits")
-    for _ in 1:ntries
-        sub = rand(1:length(node))
-        new_node, evals = insert_with_alignment(node, node[sub], sub, x, t)
-        if all(isfinite, evals)
-            hits = sum(evals[j] ∈ t[j] for j in eachindex(t))
-            if sum(hits) > besthits
-                node = new_node
-                besthits = sum(hits)
-                println("Improved: $besthits")
+    nmse = 0
+    for i in 1:ntries
+        sub = rand(1:length(tree))
+        new_node, _ = insert_with_alignment(tree.root, tree.root[sub], sub, 1, x, t, false)
+        new_tree = evaluate_to_tree(new_node, setup)
+        if complexity(new_tree) < complexity(tree)
+            tree = new_tree
+            println("1) Improved $i: hits=$(sum(tree.hits)) complexity=$(tree.complexity), mse=$(tree.mse)")
+        end
+
+        if sum(new_tree.hits) < sum(tree.hits)
+            continue 
+        end
+
+        if sum(new_tree.hits) > sum(tree.hits)
+            tree = new_tree
+            println("2) Improved $i: hits=$(sum(tree.hits)) complexity=$(tree.complexity), mse=$(tree.mse)")
+        end
+
+        if new_tree.mse <= tree.mse 
+            tree = new_tree
+            nmse += 1
+            if nmse > 100
+                println("3) Improved $i: hits=$(sum(tree.hits)) complexity=$(tree.complexity), mse=$(tree.mse)")
+                nmse = 0
             end
         end
+
     end
-    evaluate_to_tree(node, setup)
+    tree
 end
 
 

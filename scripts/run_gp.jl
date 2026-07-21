@@ -1,5 +1,6 @@
 using AlignedGP
-using Plots
+using CairoMakie
+using Statistics
 
 function print_report(strata::Vector{Vector{Tree}}, effort)
     nIndies = 0
@@ -25,7 +26,7 @@ function print_report(strata::Vector{Vector{Tree}}, effort)
 end
 
 function get_best(strata)
- pop = [indy for stratum in strata for indy in stratum]
+    pop = [indy for stratum in strata for indy in stratum]
 
     besthits = 0 
     bestindy = first(pop)
@@ -42,31 +43,37 @@ function get_best(strata)
 end
 
 function plot_best(strata)
-   
+
     pop, bestindy, distr, ev = get_best(strata)
     lo = getproperty.(setup.interval_targets.intervals, :lo)
     hi = getproperty.(setup.interval_targets.intervals, :hi)
-    scatter(setup.inputs[1], setup.noisy_targets, label="target", color=:black)
-    plot!(setup.inputs[1], setup.ideal_targets, label="ideal", color=:black)
-    plot!(setup.inputs[1], lo, fillrange=hi, fillalpha=0.2, alpha=0, label="interval")
-    plt = plot!(setup.inputs[1], ev, label="y")
-    display(plt)
+    x  = setup.inputs[1]
+    fig = Figure()
+    ax  = Axis(fig[1, 1]; xlabel = "x", ylabel = "y")
+    band!(ax, x, lo, hi; color = (:blue, 0.2), label = "interval")
+    scatter!(ax, x, setup.noisy_targets; color = :black, label = "target")
+    lines!(ax, x, setup.ideal_targets; color = :black, label = "ideal")
+    lines!(ax, x, ev; label = "y")
+    axislegend(ax)
+    display(fig)
     pop, bestindy, distr, ev
 end
 
 function scatter_best(strata)
-   
+
     pop, bestindy, distr, ev = get_best(strata)
-    @show compute_hits(ev, setup.interval_targets), sum(bestindy.hits)
     lo = getproperty.(setup.interval_targets.intervals, :lo)
     hi = getproperty.(setup.interval_targets.intervals, :hi)
     noisy = setup.noisy_targets
     order = sortperm(noisy)
     xs = noisy[order]
-    plot(xs, lo[order], fillrange=hi[order], fillalpha=0.2, alpha=0, label="interval")
-    plot!(xs, xs, color=:black, label="y=x")
-    plt = scatter!(ev, noisy, label="model")
-    display(plt)
+    fig = Figure()
+    ax  = Axis(fig[1, 1]; xlabel = "target", ylabel = "model")
+    band!(ax, xs, lo[order], hi[order]; color = (:blue, 0.2), label = "interval")
+    lines!(ax, xs, xs; color = :black, label = "y=x")
+    scatter!(ax, ev, noisy; label = "model")
+    axislegend(ax)
+    display(fig)
     pop, bestindy, distr, ev
 end
 
@@ -118,43 +125,98 @@ function set_tol!(strata, setup, tol)
     end
 end
 
+function set_eps_tol!(strata, setup)
 
-tol = 10.0
+    pop = [indy for stratum in strata for indy in stratum]
+    t = setup.noisy_targets
+
+    tol = Vector{Float64}(undef, length(t))
+    scratch = Vector{Float64}(undef, length(pop))    
+    for c in eachindex(t)
+        for j in eachindex(pop)
+            val = abs(pop[j].slope * pop[j].evals[c] + pop[j].intercept - t[c])
+            #val = abs(pop[j].evals[c] - t[c])
+            if isnan(val) 
+                val = Inf 
+            end
+            scratch[j] = val
+        end
+        med = median(scratch)
+        tol[c] = quantile(scratch, 0.4) #median(abs.(scratch .- med))
+        #@show tol[c], med, sum(isfinite.(scratch))
+        if !isfinite(tol[c]) 
+            @warn "Infinite interval"
+        end
+    end
+
+    # set bounds
+    newbounds = intervaltype.(t .- tol, t .+ tol)
+    setup.interval_targets.intervals .= newbounds
+    setup.params.tau_outer = maximum(tol)
+
+    for stratum in strata
+        for i in eachindex(stratum)
+            stratum[i] = AlignedGP.retarget(stratum[i], setup)
+        end
+    end
+end
+
+
+tol = 100.0
 #tol=0.2
 #setup = keijzer1(tol=tol, noise=0.0)
-#setup = keijzer4(tol=tol, noise = 0.0);
+setup = keijzer4(tol=tol, noise = 0.0);
 #setup = load_pmlb("1027_ESL", tol=tol)
 #setup = load_pmlb("706_sleuth_case1202", tol=tol)
 #setup = load_pmlb("1096_FacultySalaries", tol=tol)
 #setup = load_pmlb("560_bodyfat", tol=tol)
 #setup = load_pmlb("601_fri_c1_250_5", tol=tol)
 #setup = load_pmlb("583_fri_c1_1000_50", tol=tol)
-setup = pagie(tol=tol, noise = 0.0, unaries=[-,inv], binaries=[+,*])
+#setup = pagie(tol=tol, noise = 0.0, unaries=[-,inv], binaries=[+,*])
+#setup = feynman("I.11.19", tol=tol)
+#setup = feynman("I.18.12", tol=tol)
+#setup = feynman("I.13.4", tol=tol)
+#setup = feynman("I.34.14")
+#setup = feynman("III.19.51", tol=tol)
+#setup = feynman("II.35.18", tol=tol)
+#setup = feynman("III.7.38", tol=tol)
+setup = feynman("I.15.3t", tol=tol)
 
-setup.params.method = RecursiveStab
+
+
+setup.params.method = Stab
+#setup.params.use_residual_lexicase = true
+
 #setup.params.max_complexity=300
 # Two-band ratchet starts with the outer floor equal to the inner band (single-band
 # search); each ratchet freezes the floor at the tol just solved. The problem
 # constructor already set tau_outer == tol, so no two-band pressure until the first shrink.
+print("Initializing... ")
 strata, effort = initstrata(setup);
+println("done")
+#set_eps_tol!(strata, setup)          # tighten inner band + retarget all
+#plot_best(strata);
 
 # Feasibility-gated ratchet: only tighten the inner band once an individual has solved
 # every case in it. The effort cap inside evolve! is the true global stop.
 function anneal(tol, strata, setup, effort;effortcap=1000)
     while tol > 1e-8
         solved = evolve!(strata, setup, effort; effortcap=effortcap)
+        solved || break                          # effort exhausted before feasible → stop
+
         if length(setup.inputs) == 1
             plot_best(strata);
         else
+            @show "scattering"
             scatter_best(strata)
         end
-        solved || break                          # effort exhausted before feasible → stop
 
         setup.params.tau_outer = tol             # freeze outer floor at the solved tol
-        tol *= 0.9
+        tol *= 0.5
         @show tol
         setup.params.tau_outer = tol * 1.5
-        set_tol!(strata, setup, tol)             # tighten inner band + retarget all
+        set_tol!(strata, setup, tol)   
+        #set_eps_tol!(strata, setup)          # tighten inner band + retarget all
     end
 end
 

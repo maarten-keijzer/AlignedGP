@@ -104,6 +104,8 @@ function _tree_from_evals(node::Node, output::Vector{Float64},
     return Tree(node, hits, secondary, loss, isloss_scaled, slope, intercept, mse, output)
 end
 
-
+function min_tolerance(tree::Tree, setup::ProblemSetup)
+    maximum(abs, tree.evals .- setup.noisy_targets)
+end
 
 

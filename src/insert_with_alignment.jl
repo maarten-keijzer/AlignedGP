@@ -5,7 +5,7 @@ It will also update the added values of all nodes upward
 function insert_with_alignment(recipient::BinaryNode, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; circular::Bool = false)
 
     if nintervals(targets) > 10length(targets)
-        @warn "Many intervals generated: $(nintervals(targets))"
+        #@warn "Many intervals generated: $(nintervals(targets))"
     end
 
     if i == 1 
@@ -79,7 +79,7 @@ function insert_with_alignment(recipient::UnaryNode, donation::Node, i::Int, d::
     end
 end
 
-function insert_with_alignment(::Union{Var, Constant}, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; circular::Bool=false)
+function insert_with_alignment(::Union{Var, Constant}, donation::Node, i::Int, d::Int, inputs, targets::IntervalVector, recursive_stabbing; circular::Bool=false,)
     return align_node(donation, targets, inputs; circular=circular)..., d
 end
 
@@ -100,11 +100,10 @@ function compute_added_value(evals, targets::IntervalVector, rng::AbstractRNG=Ra
         hits  = compute_hits(evals, targets)
     end
 
-    if hits < depth
-        if abs(value) < 1e+100 # Things get a little wonky around 1e380 (few ulps from Inf)
-            @assert hits >= depth "$hits, $depth $(minimum(evals)) $(maximum(evals)) val=$value intv=$res"
-        end
-    end
+    correct = hits >= depth 
+    correct |= abs(value) > 1e+18
+    @assert correct "$hits, $depth $(minimum(evals)) $(maximum(evals)) val=$value intv=$res"
+    
     added_value = AddedValue(res, value, hits)
 
     return added_value, evals
@@ -129,8 +128,7 @@ function _optimize(node::BinaryNode, targets::IntervalVector, inputs, rng::Abstr
     parent_hits = added_value.hits
     if parent_hits < left_hits || parent_hits < right_hits
         phits = compute_hits(updated_evals, targets)
-        @show node
-        @show targets
+        #@show node
         @show phits, parent_hits, left_hits, right_hits, node.fun, added_value.value
     end
     @assert parent_hits >= right_hits  "[DEBUG-a4f2] T3 < T2: parent=$parent_hits right=$right_hits left=$left_hits, fun=$(node.fun)"
@@ -186,6 +184,17 @@ function align_node(node::Node, targets::IntervalVector, inputs; circular::Bool=
     # Find an added value that optimizes hit count
     added_value, new_outputs = compute_added_value(out, targets; circular=circular)
 
+    # An empty allowed region means the inverse chain collapsed and there is no valid
+    # constant for this node: e.g. the path launders an Inf back to a finite value
+    # (`x/0 = Inf`, then `exp(-Inf) = 0`), so inverting through it multiplies by
+    # `inv(0) = Inf` and yields no preimage; or a sub-ULP surrogate narrowed to nothing.
+    # `compute_added_value` falls back to 0.0 there, which would discard the node's
+    # current (possibly hit-scoring) constant and can turn `x/c` into `x/0`. Keep the
+    # node unchanged instead.
+    if isempty(added_value.allowed_intervals)
+        return node, out .+ node.addition.value
+    end
+
     if node isa Var
         node = Var(node.index, added_value)
     elseif node isa Constant
@@ -200,4 +209,3 @@ function align_node(node::Node, targets::IntervalVector, inputs; circular::Bool=
     # Return the re-optimized node with the new added value as well as the evaluations
     return node, new_outputs
 end
-
