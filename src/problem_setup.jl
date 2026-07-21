@@ -26,6 +26,10 @@ end
     # Start it equal to the inner tol; the feature is OFF while tau_outer == tol
     # (secondary band ≡ inner band ⇒ single-band search).
     tau_outer::Float64 = 0.0
+    # Experimental: swap PARENT selection from two-band lexicase to residual ε-lexicase
+    # (semi-dynamic, MAD-based). OFF by default ⇒ byte-identical to the two-band path.
+    # Constant fitting, replacement, and hit/loss bookkeeping are unaffected.
+    use_residual_lexicase::Bool = false
 end
 
 struct ProblemSetup 
@@ -42,7 +46,7 @@ struct ProblemSetup
     rng::AbstractRNG
 end
 
-export keijzer1, keijzer4, keijzer4_dup, load_pmlb
+export keijzer1, keijzer4, keijzer4_dup, load_pmlb, feynman
 
 function keijzer4(;noise = 0.0, tol=0.01, unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /])
     x = collect(0.0:0.1:10.0)
@@ -77,6 +81,53 @@ function keijzer4_dup()
         SymbolTable(1, [exp, cos, sin], [+, *, -, /]),
         GPParams(tau_outer = tol2),
         Random.GLOBAL_RNG
+    )
+end
+
+# Loads one of the AI-Feynman symbolic-regression datasets. Each data file is
+# whitespace-separated with one row per sampled point: the leading columns are the
+# input variables and the *last* column is the target output. The full files hold up
+# to 10^6 rows, so `nsamples` subsamples a random subset (set nsamples <= 0 to use all).
+function feynman(problem; with_units=true, noise=0.0, tol=0.01, nsamples=1000,
+                 unaries=[sin, exp, log, sqrt], binaries=[+, *, -, /],
+                 rng::AbstractRNG=Random.GLOBAL_RNG)
+
+    dir = "/Users/mkeijzer/work/data/feynman/" * (with_units ? "Feynman_with_units/" : "Feynman_without_units/")
+    file = dir * problem
+
+    isfile(file) || error("Feynman data file not found: $file")
+
+    lines = readlines(file)
+    filter!(l -> !isempty(strip(l)), lines)
+    isempty(lines) && error("Feynman data file is empty: $file")
+
+    if 0 < nsamples < length(lines)
+        lines = lines[randperm(rng, length(lines))[1:nsamples]]
+    end
+
+    # Parse the selected rows into a row-major matrix, then split into columns.
+    rows = [parse.(Float64, split(l)) for l in lines]
+    ncols = length(rows[1])
+    all(r -> length(r) == ncols, rows) || error("Ragged rows in Feynman data file: $file")
+    ncols >= 2 || error("Feynman data file needs >= 2 columns (inputs + target): $file")
+
+    nvars = ncols - 1
+    inputs = [Float64[r[j] for r in rows] for j in 1:nvars]
+    t = Float64[r[ncols] for r in rows]
+
+    noisy = @. t + noise * randn(rng)
+
+    params = GPParams(tau_outer = tol)
+    params.max_lexicase_comparisons = min(params.max_lexicase_comparisons, length(t))
+
+    ProblemSetup(
+        inputs,
+        t,
+        noisy,
+        IntervalVector(intervaltype.(noisy .- tol, noisy .+ tol)),
+        SymbolTable(nvars, unaries, binaries),
+        params,
+        rng
     )
 end
 

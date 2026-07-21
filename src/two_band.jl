@@ -96,3 +96,49 @@ function two_band_lexicase(pop::AbstractVector{Tree}, max_lexicase::Int, rng)
     secondary = [t.secondary_hits for t in pop]
     return pop[two_band_lexicase(primary, secondary, max_lexicase, rng)]
 end
+
+# --- Module 4: residual ε-lexicase (experimental; use_residual_lexicase) ---------------
+# Continuous-residual ε-lexicase PARENT selector (La Cava, semi-dynamic). Alternative to
+# `two_band_lexicase`, gated by `use_residual_lexicase`; constant fitting still runs on the
+# interval bands elsewhere. Selection judges the ALWAYS-SCALED series
+# (slope·evals + intercept — the residual/MSE-minimizing transform), independent of the
+# tree's band-driven `isscaledloss` pick. Residuals are recomputed on the fly (no Tree
+# field). A NaN residual (undefined output) is mapped to +Inf so it loses every case,
+# mirroring a two-band miss.
+@inline function residual_at(t::Tree, case::Int, noisy::AbstractVector{<:Real})
+    r = abs(t.slope * t.evals[case] + t.intercept - noisy[case])
+    isnan(r) ? Inf : r
+end
+
+# Raw median absolute deviation (no 1.4826 consistency factor) over the FINITE values only.
+# Returns 0.0 when nothing is finite (all-undefined case ⇒ degenerate, handled by caller).
+function finite_mad(values::AbstractVector{Float64})
+    finite = filter(isfinite, values)
+    isempty(finite) && return 0.0
+    med = median(finite)
+    return median(abs.(finite .- med))
+end
+
+# ε is a per-case constant: raw MAD over the whole pool `pop` (a single stratum, matching
+# the two-band selector's scope). The elite is the min residual over the SURVIVING pool
+# (semi-dynamic). Lazy per case: ε/elite are computed only for cases the sweep consumes.
+function residual_eps_lexicase(pop::AbstractVector{Tree}, noisy::AbstractVector{<:Real},
+                               max_lexicase::Int, rng)
+    n = length(pop)
+    n == 1 && return pop[1]
+    m = length(noisy)
+    order = randperm(rng, m)
+    ncases = min(max_lexicase, m)
+    remaining = collect(1:n)
+    for k in 1:ncases
+        length(remaining) <= 1 && break
+        case = order[k]
+        res = [residual_at(pop[j], case, noisy) for j in 1:n]  # indexed by pop index j
+        elite = minimum(res[j] for j in remaining)             # NaN already mapped to Inf
+        elite == Inf && continue                               # all survivors undefined ⇒ skip
+        threshold = elite + finite_mad(res)
+        kept = [j for j in remaining if res[j] <= threshold]
+        isempty(kept) || (remaining = kept)
+    end
+    return length(remaining) == 1 ? pop[remaining[1]] : pop[rand(rng, remaining)]
+end
